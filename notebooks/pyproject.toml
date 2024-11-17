@@ -1,0 +1,19 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "notebooks"
+version = "0.1.0"
+description = ""
+authors = [ "Diginavis team",]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+"ragc.repoparser" = { path = "../libraries/repoparser", develop = true }
+tqdm = "^4"
+pandas = "^1.5"
+numpy = "^1.0"
+jupyter = "^1.0.0"
+transformers = "^4"
+datasets = "^2"
