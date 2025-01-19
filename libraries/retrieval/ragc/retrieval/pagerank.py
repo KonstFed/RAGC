@@ -2,8 +2,8 @@ from pathlib import Path
 
 import networkx as nx
 
-from common import BaseRetrieval
-from utils import get_call_graph
+from .common import BaseRetrieval
+from .utils import get_call_graph
 
 
 class PageRankRetrieval(BaseRetrieval):
@@ -16,4 +16,4 @@ class PageRankRetrieval(BaseRetrieval):
         )
 
     def retrieve(self, query: str, n_elems: int) -> list[str]:
-        return (n[0] for n in self._top_nodes[:n_elems])
+        return [n[0] for n in self._top_nodes[:n_elems]]
