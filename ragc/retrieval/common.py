@@ -12,3 +12,7 @@ class BaseRetrieval:
     def retrieve(self, query: str, n_elems: int) -> list[str]:
         """Получить релевантные куски кода."""
         raise NotImplementedError
+
+class SemanicRetrieval:
+    def __init__(self):
+        pass
