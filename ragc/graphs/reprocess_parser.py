@@ -2,11 +2,24 @@ import json
 from pathlib import Path
 import networkx as nx
 
+from reprocess.re_processors import (
+    JsonConverter,
+    GraphBuilder,
+    CloneRepository,
+    Compose,
+    RegExpFinder,
+)
+from reprocess.re_container import ReContainer
+from tempfile import TemporaryDirectory
+
+from .common import BaseGraphParser
+
 # TODO: проблема тут что если функция вызывает функцию класса.
 # то он поставит ссылку до создания обьекта но не до вызова функции.
 # и вообще call graph он не делает. Однако можно решить с помощью Code2Flow
 
-def _add_edges(graph: nx.MultiDiGraph, comp: dict) -> None:
+
+def _add_edges(graph: nx.DiGraph, comp: dict) -> None:
     """Adds edges to the graph."""
     comp_id = comp["component_id"]
     graph.add_edge(comp["file_id"], comp_id, type="includes")
@@ -29,8 +42,8 @@ def _add_edges(graph: nx.MultiDiGraph, comp: dict) -> None:
         graph.add_edge(comp_id, node, type="includes")
 
 
-def process_graph(graph: dict) -> nx.MultiDiGraph:
-    processed_graph = nx.MultiDiGraph()
+def _process_graph(graph: dict) -> nx.DiGraph:
+    processed_graph = nx.DiGraph()
 
     for file in graph["files"]:
         processed_graph.add_node(
@@ -48,9 +61,31 @@ def process_graph(graph: dict) -> nx.MultiDiGraph:
     return processed_graph
 
 
-def read_and_process(graph_path: str | Path) -> nx.MultiDiGraph:
-    graph_path = Path(graph_path)
-    with graph_path.open("r") as f:
-        graph = json.load(f)
+class ReprocessParser(BaseGraphParser):
+    def __init__(self):
+        composition_list = [
+            GraphBuilder(),
+            JsonConverter(),
+        ]
 
-    return process_graph(graph)
+        self.composition = Compose(composition_list)
+
+    def parse(self, repo_path: Path) -> nx.DiGraph:
+        with TemporaryDirectory() as tmp_p:
+            container = ReContainer(
+                repo_path.name,
+                str(repo_path),
+                tmp_p,
+            )
+            self.composition(container)
+
+            with (Path(tmp_p) / repo_path.name / "data.json").open("r") as f:
+                graph = json.load(f)
+
+        return _process_graph(graph=graph)
+
+
+class ReprocessFileParser(BaseGraphParser):
+    def parse(repo_path) -> nx.DiGraph:
+        general_graph = super().parse()
+
