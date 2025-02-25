@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import networkx as nx
+from collections import deque
 
 from reprocess.re_processors import (
     JsonConverter,
@@ -17,6 +18,7 @@ from .common import BaseGraphParser
 # TODO: проблема тут что если функция вызывает функцию класса.
 # то он поставит ссылку до создания обьекта но не до вызова функции.
 # и вообще call graph он не делает. Однако можно решить с помощью Code2Flow
+# не распознаёт async def
 
 
 def _add_edges(graph: nx.DiGraph, comp: dict) -> None:
@@ -86,6 +88,60 @@ class ReprocessParser(BaseGraphParser):
 
 
 class ReprocessFileParser(BaseGraphParser):
+
+
+    @staticmethod
+    def to_file_only(graph: nx.DiGraph):
+
+
+        file_only_g = nx.DiGraph()
+
+
+        for node, attr in graph.nodes(data=True):
+            if attr["component_type"] != "file":
+                continue
+            file_only_g.add_node(node, **attr)
+
+
+        for node, attr in list(file_only_g.nodes(data=True)):
+
+            q = deque(graph.successors(node))
+            visited = set(graph.successors(node))
+            while q:
+                cur_comp = q.popleft()
+                
+                for succ_comp in graph.successors(cur_comp):
+                    edge_data = graph.get_edge_data(cur_comp, succ_comp)
+                    if edge_data["type"] != "includes":
+                        continue
+                    if succ_comp in visited:
+                        continue
+                    q.append(succ_comp)
+                    visited.add(succ_comp)
+
+
+            related_files = set()
+
+            for visited_node in visited:
+                for called in graph.successors(visited_node):
+                    # print(graph.nodes(data=True)[called])
+                    attr = graph.nodes(data=True)[called]
+                    file_id = attr["file_id"]
+                    if not graph.has_node(file_id):
+                        print("AAAAA")
+                    
+                    related_files.add(file_id)
+            # print(related_files)
+            if "component_type" not in attr:
+                print(attr)
+            for rel_f in related_files:
+                if not file_only_g.has_node(rel_f):
+                    raise ValueError
+                    print(rel_f)
+                file_only_g.add_edge(node, rel_f, type="calls")
+
+        return file_only_g
+
     def parse(repo_path) -> nx.DiGraph:
         general_graph = super().parse()
-
+        return ReprocessFileParser.to_file_only(general_graph)
