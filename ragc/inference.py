@@ -1,18 +1,14 @@
-import requests
+from pathlib import Path
 
-class OllamaWrapper:
-    def __init__(self, model_name: str, ollama_url: str) -> None:
-        self.model_name = model_name
-        self.ollama_url = ollama_url
+from ragc.llms import OllamaWrapper
+from ragc.retrieval.pagerank import PageRankRetrieval
+from ragc.graphs import SemanticParser
 
-    def generate(self, prompt: str) -> str:
-        response = requests.post(self.ollama_url, json={
-            "model": self.model_name,
-            "prompt": prompt,
-        })
-
-        if response.status_code != 200:
-            _err_msg = f"status code {response.status_code}"
-            raise ValueError(_err_msg)
-        
-        return response.json()["response"]
+if __name__ == "__main__":
+    repo_path = Path("/home/konstfed/Documents/diplom/RAGC/data/repositories/holostyak-bot")
+    parser = SemanticParser()
+    graph = parser.parse_into_files(repo_path)
+    retrieval = PageRankRetrieval(repo_path=repo_path, semantic_graph=graph)
+    relevant = retrieval.retrieve("", 5)
+    for file, el in relevant:
+        print(file)

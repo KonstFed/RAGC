@@ -6,5 +6,9 @@ import networkx as nx
 class BaseGraphParser(ABC):
 
     @abstractmethod
-    def parse(repo_path: Path) -> nx.MultiDiGraph:
+    def parse(self, repo_path: Path) -> nx.MultiDiGraph:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def parse_into_files(self, repo_path: Path) -> nx.MultiDiGraph:
         raise NotImplementedError
