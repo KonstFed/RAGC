@@ -3,16 +3,37 @@ from pathlib import Path
 
 import networkx as nx
 import plotly.graph_objects as go
+from pydantic import parse_obj_as
 
 from semantic_parser import SemanticGraphBuilder
-from ragc.graphs.common import BaseGraphParser
+from ragc.graphs.common import (
+    Node,
+    Edge,
+    NodeType,
+    EdgeType,
+    BaseGraphParser,
+)
 
 
 class SemanticParser(BaseGraphParser):
-    color2class = {
+    color2class: dict[str, str] = {
         "green": "file",
         "blue": "class",
         "orange": "function",
+    }
+
+    node2type: dict[str, str] = {
+        "file": NodeType.FILE,
+        "class": NodeType.CLASS,
+        "function": NodeType.FUNCTION,
+    }
+
+    edge2type: dict[str, str] = {
+        "Encapsulation": EdgeType.OWNER,
+        "Invoke": EdgeType.CALL,
+        "Import": EdgeType.IMPORT,
+        "Ownership": EdgeType.OWNER,
+        "Class Hierarchy": EdgeType.INHERITED,
     }
 
     def __init__(self):
@@ -32,31 +53,76 @@ class SemanticParser(BaseGraphParser):
 
         new_values = {}
         for node in file_nodes:
-            with (repo_path / node).open("r") as f:
+            attr = graph.nodes(data=True)[node]
+            with (repo_path / attr["file_path"]).open("r") as f:
                 file_code = f.read()
 
-            if "code" in graph.nodes(data=True)[node]:
-                raise ValueError( graph.nodes(data=True)[node])
-            
-            new_values[node] = file_code
-        
-        nx.set_node_attributes(graph, new_values, "code")
+            if "body" in graph.nodes(data=True)[node]:
+                raise ValueError(graph.nodes(data=True)[node])
 
+            new_values[node] = file_code
+
+        nx.set_node_attributes(graph, new_values, "body")
 
         return graph
 
     def _relabel(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
         mapping = {}
+        file_path_map = {}
         for node in graph.nodes:
             if "C." != node[:2]:
                 _err = f"All nodes should start form 'C.'. Got instead {node}"
                 raise ValueError(_err)
             new_node = node.removeprefix("C.")
             new_node = Path(new_node).relative_to(repo_path)
-            mapping[node] = new_node
 
+            # remove .py and extract file_path
+            parts = list(new_node.parts)
+            filename = list(filter(lambda p: p[1].endswith(".py"), enumerate(parts)))
+            if len(filename) != 1:
+                raise ValueError(f"incorrect path {new_node}")
+
+            idx, filename = filename[0]
+            file_path = Path(*parts[: idx + 1])
+
+            parts[idx] = parts[idx].removesuffix(".py")
+
+            mapping[node] = ".".join(parts)
+            file_path_map[node] = file_path
+
+        nx.set_node_attributes(graph, file_path_map, "file_path")
         nx.relabel_nodes(graph, mapping, copy=False)
         return graph
+    
+    def _fix_code_ident(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
+        for node, attr in graph.nodes(data=True):
+            if attr["type"] == "file":
+                continue
+            code = attr["body"]
+            ident_pos = attr["start_point"][1]
+            code = " " * ident_pos + code
+            lines = code.splitlines()
+            min_indent = min((len(line) - len(line.lstrip())) for line in lines if line.strip())
+            stripped_lines = [line[min_indent:] if line.strip() else line for line in lines]
+            code = "\n".join(stripped_lines)
+            attr["body"] = code
+        return graph
+
+    def to_standart(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
+        norm_graph = nx.MultiDiGraph()
+        for node, attr in graph.nodes(data=True):
+            new_node = Node(
+                name=node,
+                type=self.node2type[attr["type"]],
+                code=attr["body"],
+                file_path=attr["file_path"],
+            )
+            norm_graph.add_node(node, **new_node.model_dump())
+
+        for n_from, n_to, edge_data in graph.edges(data=True):
+            new_edge = Edge(type=self.edge2type[edge_data["type"]])
+            norm_graph.add_edge(n_from, n_to, **new_edge.model_dump())
+        return norm_graph
 
     def parse(self, repo_path: Path) -> nx.MultiDiGraph:
         repo_path = repo_path.absolute()
@@ -70,12 +136,13 @@ class SemanticParser(BaseGraphParser):
 
         graph = self._relabel(graph=graph, repo_path=repo_path)
         graph = self._process(graph=graph, repo_path=repo_path)
-
+        graph = self._fix_code_ident(graph=graph)
+        graph = self.to_standart(graph=graph)
         return graph
 
     def parse_into_files(self, repo_path: Path) -> nx.MultiDiGraph:
         graph = self.parse(repo_path=repo_path)
-        file_nodes = [n for n, attr in graph.nodes(data=True) if attr["type"] == "file"]
+        file_nodes = [n for n, attr in graph.nodes(data=True) if attr["type"] == NodeType.FILE]
         return graph.subgraph(file_nodes).copy()
 
 
