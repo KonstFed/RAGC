@@ -7,7 +7,7 @@ from ragc.graphs import BaseGraphParser
 
 class PageRankRetrieval(BaseRetrieval):
     def __init__(self, repo_path: Path, parser: BaseGraphParser) -> None:
-        super().__init__(repo_path)
+        super().__init__(repo_path, parser)
         self.graph = parser.parse_into_files(repo_path=repo_path)
         _pagerank_mapping = nx.pagerank(self.graph)
         self._top_nodes = sorted(
