@@ -95,7 +95,7 @@ class SemanticParser(BaseGraphParser):
         return graph
     
     def _fix_code_ident(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
-        for node, attr in graph.nodes(data=True):
+        for _, attr in graph.nodes(data=True):
             if attr["type"] == "file":
                 continue
             code = attr["body"]

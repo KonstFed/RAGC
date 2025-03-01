@@ -2,14 +2,14 @@ from pathlib import Path
 
 import networkx as nx
 
-from .common import BaseRetrieval
-
+from ragc.retrieval import BaseRetrieval
+from ragc.graphs import BaseGraphParser
 
 class PageRankRetrieval(BaseRetrieval):
-    def __init__(self, repo_path: Path, semantic_graph: nx.MultiDiGraph) -> None:
+    def __init__(self, repo_path: Path, parser: BaseGraphParser) -> None:
         super().__init__(repo_path)
-        self.graph = semantic_graph
-        _pagerank_mapping = nx.pagerank(semantic_graph)
+        self.graph = parser.parse_into_files(repo_path=repo_path)
+        _pagerank_mapping = nx.pagerank(self.graph)
         self._top_nodes = sorted(
             _pagerank_mapping.items(),
             key=lambda x: x[1],
