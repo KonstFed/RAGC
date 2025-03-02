@@ -24,4 +24,5 @@ code2flow = "^2.5.1"
 ipykernel = "^6.29.5"
 pydantic = "^2.10.6"
 ollama = "^0.4.7"
+pydot = "^3.0.4"
 
