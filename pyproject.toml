@@ -25,4 +25,5 @@ ipykernel = "^6.29.5"
 pydantic = "^2.10.6"
 ollama = "^0.4.7"
 pydot = "^3.0.4"
+datasets = "^3.3.2"
 
