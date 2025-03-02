@@ -17,7 +17,7 @@ BRANCH="${4:-main}"  # Branch passed as the fourth argument (default: main)
 
 # Clone the repository into the target folder
 echo "Cloning repository: $GITHUB_REPO into $TARGET_FOLDER..."
-git clone "https://github.com/$GITHUB_REPO.git" "$TARGET_FOLDER" || { echo "Failed to clone repository"; exit 1; }
+git clone "git@github.com:$GITHUB_REPO.git" "$TARGET_FOLDER" || { echo "Failed to clone repository"; exit 1; }
 
 # Navigate to the repository directory
 cd "$TARGET_FOLDER" || { echo "Failed to navigate to repository directory: $TARGET_FOLDER"; exit 1; }
