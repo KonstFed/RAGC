@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
 from enum import Enum
-from typing import Literal, Annotated
+from pathlib import Path
+from typing import Annotated
 
 import networkx as nx
-from pydantic import BaseModel, field_validator, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseGraphParser(ABC):

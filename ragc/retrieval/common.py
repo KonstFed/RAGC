@@ -1,8 +1,7 @@
 from pathlib import Path
 
-import networkx as nx
-
 from ragc.graphs.common import BaseGraphParser
+
 
 class BaseRetrieval:
     """Базовый класс для всех retrieval."""

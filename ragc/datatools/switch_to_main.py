@@ -1,11 +1,10 @@
-import subprocess
 import argparse
-from pathlib import Path
+import subprocess
 from datetime import datetime
-from multiprocessing import Pool
+from pathlib import Path
 
-from tqdm import tqdm
 import pandas as pd
+from tqdm import tqdm
 
 SWITCH_SCRIPT_P = Path(__file__).parent.resolve() / "switch_commit.bash"
 SWITCH_SCRIPT_LATEST_P = Path(__file__).parent.resolve() / "switch_to_latest.bash"

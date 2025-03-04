@@ -1,17 +1,15 @@
 import json
-from pathlib import Path
-import networkx as nx
 from collections import deque
-
-from reprocess.re_processors import (
-    JsonConverter,
-    GraphBuilder,
-    CloneRepository,
-    Compose,
-    RegExpFinder,
-)
-from reprocess.re_container import ReContainer
+from pathlib import Path
 from tempfile import TemporaryDirectory
+
+import networkx as nx
+from reprocess.re_container import ReContainer
+from reprocess.re_processors import (
+    Compose,
+    GraphBuilder,
+    JsonConverter,
+)
 
 from .common import BaseGraphParser
 

@@ -26,4 +26,16 @@ pydantic = "^2.10.6"
 ollama = "^0.4.7"
 pydot = "^3.0.4"
 datasets = "^3.3.2"
+ruff = "^0.9.9"
 
+[tool.ruff]  # Configuration for Ruff
+line-length = 120  # Set the maximum line length
+select = [  # Enable specific rules
+    "E",  # Pycodestyle errors
+    "F",  # Pyflakes
+    "I",  # Isort (import sorting)
+    "B",  # flake8-bugbear
+    "C",  # flake8-comprehensions
+    "UP", # pyupgrade (modern Python features)
+]
+ignore = ["E203"]  # Ignore specific rules

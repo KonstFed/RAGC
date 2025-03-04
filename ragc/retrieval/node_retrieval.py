@@ -1,12 +1,12 @@
-from pathlib import Path
 from abc import abstractmethod
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
 import ollama
 
-from ragc.retrieval import BaseRetrieval
 from ragc.graphs import BaseGraphParser, NodeType
+from ragc.retrieval import BaseRetrieval
 
 
 class BaseEmbRetieval(BaseRetrieval):
