@@ -35,4 +35,4 @@ echo "Commit Date: $COMMIT_DATE"
 # Switch to the commit
 git checkout "$COMMIT_HASH" || { echo "Failed to checkout commit"; exit 1; }
 
-echo $COMMIT_HASH"
+echo $COMMIT_HASH

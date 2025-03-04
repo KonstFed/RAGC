@@ -26,4 +26,4 @@ git pull origin "$BRANCH" || { echo "Failed to pull changes"; exit 1; }
 CURRENT_COMMIT=$(git rev-parse HEAD)
 
 echo "Successfully cloned repository and pulled latest changes from branch: $BRANCH"
-echo $CURRENT_COMMIT"
+echo $CURRENT_COMMIT
