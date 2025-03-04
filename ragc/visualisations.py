@@ -1,10 +1,11 @@
-from pathlib import Path
 from copy import deepcopy
+from pathlib import Path
 
-import networkx as nx
 import matplotlib.pyplot as plt
+import networkx as nx
 
-from ragc.graphs.common import Node, Edge, NodeType, EdgeType
+from ragc.graphs.common import EdgeType, NodeType
+
 
 def plot_graph(semantic_graph: nx.MultiDiGraph, save_path: Path | str, plot: bool = False) -> None:
     """Draws and saves semantic graph to png. In addition calls matplotlib if needed"""

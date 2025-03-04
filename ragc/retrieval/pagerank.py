@@ -2,8 +2,9 @@ from pathlib import Path
 
 import networkx as nx
 
-from ragc.retrieval import BaseRetrieval
 from ragc.graphs import BaseGraphParser
+from ragc.retrieval import BaseRetrieval
+
 
 class PageRankRetrieval(BaseRetrieval):
     def __init__(self, repo_path: Path, parser: BaseGraphParser) -> None:

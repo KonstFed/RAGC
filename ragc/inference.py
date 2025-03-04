@@ -2,9 +2,8 @@ from pathlib import Path
 
 import ollama
 
-from ragc.retrieval.node_retrieval import FileEmbRetrieval, LowGranularityRetrieval
 from ragc.graphs import SemanticParser
-
+from ragc.retrieval.node_retrieval import LowGranularityRetrieval
 
 
 def generate_prompt(query, relevant_snippets):

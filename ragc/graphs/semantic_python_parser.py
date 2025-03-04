@@ -1,17 +1,16 @@
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import networkx as nx
 import plotly.graph_objects as go
-from pydantic import parse_obj_as
-
 from semantic_parser import SemanticGraphBuilder
+
 from ragc.graphs.common import (
-    Node,
-    Edge,
-    NodeType,
-    EdgeType,
     BaseGraphParser,
+    Edge,
+    EdgeType,
+    Node,
+    NodeType,
 )
 
 
