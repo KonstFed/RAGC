@@ -35,8 +35,12 @@ class SemanticParser(BaseGraphParser):
         "Class Hierarchy": EdgeType.INHERITED,
     }
 
-    def __init__(self):
-        self._builder = SemanticGraphBuilder()
+    def _clean(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
+        bad_nodes = [n for n in graph.nodes() if " " in n.strip()]
+        for node in bad_nodes:
+            graph.remove_node(node)
+
+        return graph
 
     def _process(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
         new_types = {
@@ -101,7 +105,9 @@ class SemanticParser(BaseGraphParser):
             ident_pos = attr["start_point"][1]
             code = " " * ident_pos + code
             lines = code.splitlines()
-            min_indent = min((len(line) - len(line.lstrip())) for line in lines if line.strip())
+            if len(lines) == 0:
+                continue
+            min_indent = min((len(line) - len(line.lstrip())) for line in lines)
             stripped_lines = [line[min_indent:] if line.strip() else line for line in lines]
             code = "\n".join(stripped_lines)
             attr["body"] = code
@@ -127,12 +133,15 @@ class SemanticParser(BaseGraphParser):
         repo_path = repo_path.absolute()
 
         with TemporaryDirectory() as t:
-            self._builder.build_from_one(str(repo_path), t, gsave=True, gprint=False)
+
+            _builder = SemanticGraphBuilder()
+            _builder.build_from_one(str(repo_path), t, gsave=True, gprint=False)
 
             t = Path(t)
             graph_file = next(t.iterdir())
             graph = nx.read_gml(graph_file)
 
+        graph = self._clean(graph=graph)
         graph = self._relabel(graph=graph, repo_path=repo_path)
         graph = self._process(graph=graph, repo_path=repo_path)
         graph = self._fix_code_ident(graph=graph)
