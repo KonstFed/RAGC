@@ -26,6 +26,9 @@ class NodeType(Enum):
     FUNCTION = "function"
     FILE = "file"
 
+    def __str__(self):
+        return self.value
+
 
 class EdgeType(Enum):
     IMPORT = "import"
@@ -33,9 +36,12 @@ class EdgeType(Enum):
     CALL = "call"
     INHERITED = "inherited"
 
+    def __str__(self):
+        return self.value
+
 
 class Node(BaseModel):
-    name: Annotated[str, Field(pattern=r"^[A-Za-z0-9._]+$")]
+    name: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+$")]
     type: NodeType
     code: str
     file_path: Path
@@ -58,3 +64,15 @@ class Edge(BaseModel):
         extra="ignore",
         frozen=True,
     )
+
+
+def save_graph(graph: nx.Graph, save_path: Path) -> None:
+    nx.write_gml(graph, save_path, stringizer=str)
+
+
+def read_graph(read_path: Path) -> nx.Graph:
+    graph = nx.read_gml(read_path)
+    for _, attr in graph.nodes(data=True):
+        attr["type"] = NodeType(attr["type"])
+        attr["file_path"] = Path(attr["file_path"])
+    return graph
