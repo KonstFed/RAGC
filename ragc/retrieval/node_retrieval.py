@@ -52,7 +52,7 @@ class BaseEmbRetieval(BaseRetrieval):
 
     
     def retrieve(self, query: str, n_elems: int) -> list[tuple[str,str]]:
-        query_emb = ollama.embed(model=self.emb_model, input=query).embeddings
+        query_emb = self.ollama_client.embed(model=self.emb_model, input=query).embeddings
         query_emb = query_emb / np.linalg.norm(query_emb)
         best_results = self.get_sorted_similar_nodes(query_emb)
 

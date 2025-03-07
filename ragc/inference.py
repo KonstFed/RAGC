@@ -8,6 +8,7 @@ from ragc.utils import load_secrets
 
 SECRETS = load_secrets()
 
+
 def generate_prompt(query, relevant_snippets):
     prompt = "You are an expert programming assistant. Your task is to help me with the following snippets that may help you:\n\n"
 
@@ -33,16 +34,13 @@ def inference(repo_path: Path, query: str) -> str:
 
     relevant_snippets = retrieval.retrieve(query, 5)
     prompt = generate_prompt(query, relevant_snippets)
-    
-    stream = client.chat(model='deepseek-r1', messages=[
-      {
-        'role': 'user',
-        'content': prompt,
-      },
-    ],     stream=True,
-)
-    for chunk in stream:
-      print(chunk['message']['content'], end='', flush=True)
+
+    response = client.generate(
+        model="deepseek-r1",
+        prompt=prompt,
+    )
+    return response.response
+
 
 if __name__ == "__main__":
     repo_path = Path("/home/konstfed/Documents/diplom/RAGC/data/holostyak-bot")
