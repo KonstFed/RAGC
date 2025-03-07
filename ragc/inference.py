@@ -4,7 +4,9 @@ import ollama
 
 from ragc.graphs import SemanticParser
 from ragc.retrieval.node_retrieval import LowGranularityRetrieval
+from ragc.utils import load_secrets
 
+SECRETS = load_secrets()
 
 def generate_prompt(query, relevant_snippets):
     prompt = "You are an expert programming assistant. Your task is to help me with the following snippets that may help you:\n\n"
@@ -25,13 +27,14 @@ Let’s get started!"""
 
 
 def inference(repo_path: Path, query: str) -> str:
+    client = ollama.Client(host=SECRETS["OLLAMA_URL"])
     parser = SemanticParser()
     retrieval = LowGranularityRetrieval(repo_path, parser, "unclemusclez/jina-embeddings-v2-base-code")
 
     relevant_snippets = retrieval.retrieve(query, 5)
     prompt = generate_prompt(query, relevant_snippets)
     
-    stream = ollama.chat(model='deepseek-r1', messages=[
+    stream = client.chat(model='deepseek-r1', messages=[
       {
         'role': 'user',
         'content': prompt,
@@ -42,6 +45,6 @@ def inference(repo_path: Path, query: str) -> str:
       print(chunk['message']['content'], end='', flush=True)
 
 if __name__ == "__main__":
-    repo_path = Path("/home/jovyan/thesis/diplom/RAGC/holostyak-bot")
+    repo_path = Path("/home/konstfed/Documents/diplom/RAGC/data/holostyak-bot")
     query = "Create DB for admin users"
     print(inference(repo_path, query))

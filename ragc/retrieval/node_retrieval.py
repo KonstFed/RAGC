@@ -7,12 +7,16 @@ import ollama
 
 from ragc.graphs import BaseGraphParser, NodeType
 from ragc.retrieval import BaseRetrieval
+from ragc.utils import load_secrets
 
+
+SECRETS = load_secrets()
 
 class BaseEmbRetieval(BaseRetrieval):
     def __init__(self, repo_path: Path, parser: BaseGraphParser, emb_model: str) -> None:
         super().__init__(repo_path, parser)        
         self.emb_model = emb_model
+        self.ollama_client = ollama.Client(host=SECRETS["OLLAMA_URL"])
         self.embeddings = None
         self.index2node = None
         self.graph = self._init_graph()
@@ -38,7 +42,7 @@ class BaseEmbRetieval(BaseRetrieval):
             node_idx.append(n)
 
         self.index2node = {i:n for i, n in enumerate(node_idx)}
-        response = ollama.embed(model=self.emb_model, input=all_files)
+        response = self.ollama_client.embed(model=self.emb_model, input=all_files)
         embeddings = np.array(response.embeddings)
         # normalize embeddings or not
         self.embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
