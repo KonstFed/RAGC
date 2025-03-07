@@ -8,16 +8,49 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseGraphParser(ABC):
-    @abstractmethod
+    """Base class for parsing repo."""
+
     def parse(self, repo_path: Path) -> nx.MultiDiGraph:
+        """Parse repository into graph.
+
+        Structure of graph is described using `Node` and `Edge` in the same file.
+
+        Args:
+            repo_path (Path): path to root of the repo
+
+        Returns:
+            nx.MultiDiGraph
+
+        """
+        graph = self.parse_raw(repo_path=repo_path)
+        graph = self.to_standart(graph=graph, repo_path=repo_path)
+        return graph
+
+    @abstractmethod
+    def parse_raw(self, repo_path: Path) -> nx.MultiDiGraph:
+        """Get raw original graph from parser.
+
+        Args:
+            repo_path (Path): path to root of the repo
+
+        Returns:
+            nx.MultiDiGraph: raw original semantic graph
+
+        """
         raise NotImplementedError
 
     @abstractmethod
-    def parse_into_files(self, repo_path: Path) -> nx.MultiDiGraph:
-        raise NotImplementedError
+    def to_standart(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
+        """Transform original semantic graph into united format.
 
-    @abstractmethod
-    def to_standart(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
+        Args:
+            graph (nx.MultiDiGraph): original graph
+            repo_path (Path): path to root of the repo
+
+        Returns:
+            nx.MultiDiGraph
+
+        """
         raise NotImplementedError
 
 

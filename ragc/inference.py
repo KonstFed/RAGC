@@ -10,6 +10,7 @@ SECRETS = load_secrets()
 
 
 def generate_prompt(query, relevant_snippets):
+    # TODO: убрать
     prompt = "You are an expert programming assistant. Your task is to help me with the following snippets that may help you:\n\n"
 
     for i, (file_id, code) in enumerate(relevant_snippets, start=1):
@@ -30,9 +31,10 @@ Let’s get started!"""
 def inference(repo_path: Path, query: str) -> str:
     client = ollama.Client(host=SECRETS["OLLAMA_URL"])
     parser = SemanticParser()
-    retrieval = LowGranularityRetrieval(repo_path, parser, "unclemusclez/jina-embeddings-v2-base-code")
-
+    graph = parser.parse(repo_path=repo_path)
+    retrieval = LowGranularityRetrieval(repo_path, graph, "unclemusclez/jina-embeddings-v2-base-code")
     relevant_snippets = retrieval.retrieve(query, 5)
+
     prompt = generate_prompt(query, relevant_snippets)
 
     response = client.generate(
