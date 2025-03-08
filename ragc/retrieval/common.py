@@ -49,6 +49,13 @@ class BaseRetrieval(ABC):
             self._index()
             return
 
+        if index_path.exists():
+            self.load_index(path=index_path)
+            return
+
+        self._index()
+        self.save_index(path=index_path)
+
     @abstractmethod
     def retrieve(self, query: str, n_elems: int) -> list[Node]:
         """Получить релевантные куски кода."""
@@ -56,7 +63,6 @@ class BaseRetrieval(ABC):
 
 
 class BaseRetievalConfig(BaseModel):
-
     def create(self, graph: nx.MultiDiGraph, cache_index_path: Path | None = None) -> BaseRetrieval:
         """Factory method that creates instance of retrieval."""
         raise NotImplementedError
