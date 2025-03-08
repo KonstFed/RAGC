@@ -57,7 +57,7 @@ class BaseRetrieval(ABC):
         self.save_index(path=index_path)
 
     @abstractmethod
-    def retrieve(self, query: str, n_elems: int) -> list[Node]:
+    def retrieve(self, query: str, n_elems: int, ignore_nodes: list[str] | None = None) -> list[Node]:
         """Получить релевантные куски кода."""
         raise NotImplementedError
 

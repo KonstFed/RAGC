@@ -5,6 +5,7 @@ import networkx as nx
 import numpy as np
 
 from ragc.graphs import NodeType
+from ragc.graphs.common import Node
 from ragc.graphs.utils import get_file_graph
 from ragc.llm.embedding import BaseEmbedder, EmbederConfig
 from ragc.retrieval.common import BaseRetievalConfig, BaseRetrieval
@@ -73,16 +74,21 @@ class BaseEmbRetieval(BaseRetrieval):
         # normalize embeddings for cosine similarity
         self.embeddings = self.embeddings / np.linalg.norm(self.embeddings, axis=1, keepdims=True)
 
-    def retrieve(self, query: str, n_elems: int) -> list[tuple[str, str]]:
+    def retrieve(self, query: str, n_elems: int, ignore_nodes: list[str] | None = None) -> list[Node]:
         """Получить релевантные куски кода."""
+        if ignore_nodes is None:
+            ignore_nodes = set()
         query_emb = self.embedder.embed(query)
         query_emb = query_emb / np.linalg.norm(query_emb)
         best_results = self.get_sorted_similar_nodes(query_emb)
+        best_results = filter(lambda p: p[0] not in ignore_nodes, best_results)
 
         out = []
-        for node, _sim in best_results[:n_elems]:
+        for _ in range(n_elems):
+            node, _sim = next(best_results)
             node_data = self.graph.nodes(data=True)[node]
-            out.append((node, node_data["code"]))
+            out.append(Node.model_validate(node_data))
+
         return out
 
 
