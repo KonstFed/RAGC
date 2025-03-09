@@ -60,7 +60,7 @@ class AbstractCacheDataset(ABC):
         return self.load_single_repo(repo_cache_path=self.elements_cache_p[idx])
 
     def __len__(self) -> int:
-        return len(self.repo_ids)
+        return len(self.elements_cache_p)
 
 
 class GraphDataset(AbstractCacheDataset):
