@@ -7,7 +7,7 @@ import networkx as nx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class BaseGraphParser(ABC):
+class BaseGraphParser(BaseModel, ABC):
     """Base class for parsing repo."""
 
     def parse(self, repo_path: Path) -> nx.MultiDiGraph:
@@ -53,6 +53,10 @@ class BaseGraphParser(ABC):
         """
         raise NotImplementedError
 
+    model_config = ConfigDict(
+        extra="ignore",
+        frozen=True,
+    )
 
 class NodeType(Enum):
     CLASS = "class"

@@ -4,8 +4,8 @@ import numpy as np
 import ollama
 from pydantic import HttpUrl
 
-from ragc.llm.embedding import BaseEmbedder, EmbederConfig
-from ragc.llm.generator import BaseGenerator, GeneratorConfig
+from ragc.llm.embedding import BaseEmbedder, BaseEmbederConfig
+from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig
 
 
 class OllamaEmbedder(BaseEmbedder):
@@ -19,7 +19,7 @@ class OllamaEmbedder(BaseEmbedder):
         return embeddings
 
 
-class OllamaEmbedderConfig(EmbederConfig):
+class OllamaEmbedderConfig(BaseEmbederConfig):
     type: Literal["ollama_embedding"] = "ollama_embedding"
     ollama_url: HttpUrl
     emb_model: str
@@ -41,12 +41,12 @@ class OllamaGenerator(BaseGenerator):
         return response.response
 
 
-class OllamaGeneratorConfig(GeneratorConfig):
+class OllamaGeneratorConfig(BaseGeneratorConfig):
     ollama_url: HttpUrl
     model: str
 
     def create(self) -> OllamaGenerator:
         return OllamaGenerator(
-            ollama_url=self.ollama_url,
+            ollama_url=str(self.ollama_url),
             model=self.model,
         )

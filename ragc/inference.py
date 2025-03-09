@@ -1,50 +1,46 @@
 from pathlib import Path
 
-import ollama
+import networkx as nx
+from pydantic import BaseModel, Field
 
-from ragc.graphs import SemanticParser
-from ragc.retrieval.node_retrieval import LowGranularityRetrieval
-from ragc.utils import load_secrets
-
-SECRETS = load_secrets()
-
-
-def generate_prompt(query, relevant_snippets):
-    # TODO: убрать
-    prompt = "You are an expert programming assistant. Your task is to help me with the following snippets that may help you:\n\n"
-
-    for i, (file_id, code) in enumerate(relevant_snippets, start=1):
-        c_snippet = f"{i}. **Code Snippet {i}** from **{file_id}**:\n```\n{code}\n```\n"
-        prompt += c_snippet + "\n"
-
-    prompt += f"**Question/Task**: {query}\n\n"
-    prompt += """Provide the following in your response:
-- A clear explanation of your solution or answer.
-- The modified or generated code (if applicable).
-- Any additional notes or best practices related to the task.
-
-Let’s get started!"""
-
-    return prompt
+from ragc.fusion import BaseFusion, FusionConfig
+from ragc.graphs import BaseGraphParser, GraphParserConfig
+from ragc.retrieval import RetrievalConfig
+from ragc.retrieval.common import BaseRetievalConfig
 
 
-def inference(repo_path: Path, query: str) -> str:
-    client = ollama.Client(host=SECRETS["OLLAMA_URL"])
-    parser = SemanticParser()
-    graph = parser.parse(repo_path=repo_path)
-    retrieval = LowGranularityRetrieval(repo_path, graph, "unclemusclez/jina-embeddings-v2-base-code")
-    relevant_snippets = retrieval.retrieve(query, 5)
+class Inference:
+    def __init__(
+        self, parser: BaseGraphParser, retrieval_cfg: BaseRetievalConfig, fusion: BaseFusion, n_elems: int = 5,
+    ):
+        self.parser = parser
+        self.retrieval_cfg = retrieval_cfg
+        self.fusion = fusion
+        self.n_elems = n_elems
 
-    prompt = generate_prompt(query, relevant_snippets)
+    def __call__(
+        self,
+        query: str,
+        repo_path: Path | str | None = None,
+        graph: nx.MultiDiGraph | None = None,
+        ignore_nodes: list[str] | None = None,
+    ):
+        if repo_path is not None:
+            graph = self.parser.parse(repo_path=Path(repo_path))
 
-    response = client.generate(
-        model="deepseek-r1",
-        prompt=prompt,
-    )
-    return response.response
+        # TODO: надо придумать механизм умного ретриавала (сколько возращать? Пока просто 5 элементов)
+        retrieval = self.retrieval_cfg.create(graph=graph)
+        relevant_nodes = retrieval.retrieve(query=query, n_elems=self.n_elems, ignore_nodes=ignore_nodes)
+        return self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
 
 
-if __name__ == "__main__":
-    repo_path = Path("/home/konstfed/Documents/diplom/RAGC/data/holostyak-bot")
-    query = "Create DB for admin users"
-    print(inference(repo_path, query))
+class InferenceConfig(BaseModel):
+    parser: GraphParserConfig = Field(discriminator="type")
+    retrieval: RetrievalConfig = Field(discriminator="type")
+    fusion: FusionConfig = Field(discriminator="type")
+
+    n_elems: int = 5
+
+    def create(self) -> Inference:
+        fusion = self.fusion.create()
+        return Inference(parser=self.parser, retrieval_cfg=self.retrieval, fusion=fusion, n_elems=self.n_elems)

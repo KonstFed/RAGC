@@ -6,11 +6,10 @@ from pydantic import BaseModel, ConfigDict
 class BaseGenerator(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> str:
-        """Generate embeddings for given inputs."""
+        """Generate for given input."""
 
 
-class GeneratorConfig(BaseModel):
-
+class BaseGeneratorConfig(BaseModel):
     def create(self) -> BaseGenerator:
         """Factory method that creates instance of BaseGenerator."""
         raise NotImplementedError

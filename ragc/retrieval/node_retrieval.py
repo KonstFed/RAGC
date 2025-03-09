@@ -7,7 +7,8 @@ import numpy as np
 from ragc.graphs import NodeType
 from ragc.graphs.common import Node
 from ragc.graphs.utils import get_file_graph
-from ragc.llm.embedding import BaseEmbedder, EmbederConfig
+from ragc.llm import EmbedderConfig
+from ragc.llm.embedding import BaseEmbedder
 from ragc.retrieval.common import BaseRetievalConfig, BaseRetrieval
 
 
@@ -107,22 +108,23 @@ class LowGranularityRetrieval(BaseEmbRetieval):
 
 
 class EmbRetrievalConfig(BaseRetievalConfig):
-    embeder_config: EmbederConfig
+    embeder_config: EmbedderConfig
+    cache_index_path: Path | None = None
 
 
 class FileEmbRetrievalConfig(EmbRetrievalConfig):
     type: Literal["file_retrieval"] = "file_retrieval"
 
-    def create(self, graph: nx.MultiDiGraph, cache_index_path: Path | None = None) -> FileEmbRetrieval:
-        return FileEmbRetrieval(graph=graph, embedder=self.embeder_config.create(), cache_index_path=cache_index_path)
+    def create(self, graph: nx.MultiDiGraph) -> FileEmbRetrieval:
+        return FileEmbRetrieval(graph=graph, embedder=self.embeder_config.create(), cache_index_path=self.cache_index_path)
 
 
 class LowGranularityRetrievalConfig(EmbRetrievalConfig):
-    type: Literal["file_retrieval"] = "low_granularity_retrieval"
+    type: Literal["low_granularity_retrieval"] = "low_granularity_retrieval"
 
-    def create(self, graph: nx.MultiDiGraph, cache_index_path: Path | None = None) -> LowGranularityRetrieval:
+    def create(self, graph: nx.MultiDiGraph) -> LowGranularityRetrieval:
         return LowGranularityRetrieval(
             graph=graph,
             embedder=self.embeder_config.create(),
-            cache_index_path=cache_index_path,
+            cache_index_path=self.cache_index_path,
         )

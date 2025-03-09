@@ -6,7 +6,7 @@ import networkx as nx
 from tqdm import tqdm
 
 from ragc.graphs import BaseGraphParser, read_graph, save_graph
-from ragc.retrieval.common import BaseRetievalConfig, BaseRetrieval
+from ragc.retrieval.common import BaseRetievalConfig
 
 
 class AbstractCacheDataset(ABC):

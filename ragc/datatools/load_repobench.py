@@ -23,7 +23,7 @@ def load_repo(data: tuple[str, Path, datetime]) -> tuple[str, bool, str, str, st
         return repo_name, False, "", "", f"Already exists {save_path}"
 
     result = subprocess.run(
-        ["bash", LOAD_SCRIPT_PATH, repo_name, save_path], capture_output=True, text=True
+        ["bash", LOAD_SCRIPT_PATH, repo_name, save_path], capture_output=True, text=True, check=False,
     )
     commit_hash = result.stdout.strip().split("\n")[-1]
     return repo_name, result.returncode == 0, commit_hash, result.stdout, result.stderr
@@ -36,7 +36,7 @@ def multiprocess_load(repos2load: set[str], save_path: Path) -> pd.DataFrame:
             total=len(repos2load),
         )
         results = pd.DataFrame(
-            results, columns=["repo", "status", "commit_hash", "stdout", "stder"]
+            results, columns=["repo", "status", "commit_hash", "stdout", "stder"],
         )
         results["reponame"] = results["repo"].apply(lambda p: p.split("/")[-1])
 
@@ -76,7 +76,7 @@ def load(save_path: Path, clean: bool = False) -> None:
 
     verified_folders = set(meta["reponame"])
     folder_iter = lambda: filter(
-        lambda p: p.is_dir() and not p.stem.startswith("."), save_path.iterdir()
+        lambda p: p.is_dir() and not p.stem.startswith("."), save_path.iterdir(),
     )
     for folder in tqdm(list(folder_iter())):
         if folder.name in verified_folders:

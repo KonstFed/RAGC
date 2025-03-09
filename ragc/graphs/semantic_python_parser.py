@@ -1,8 +1,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Literal
 
 import networkx as nx
-import plotly.graph_objects as go
 from semantic_parser import SemanticGraphBuilder
 
 from ragc.graphs.common import (
@@ -13,27 +13,29 @@ from ragc.graphs.common import (
     NodeType,
 )
 
+COLOR2CLASS: dict[str, str] = {
+    "green": "file",
+    "blue": "class",
+    "orange": "function",
+}
+
+NODE2TYPE: dict[str, str] = {
+    "file": NodeType.FILE,
+    "class": NodeType.CLASS,
+    "function": NodeType.FUNCTION,
+}
+
+EDGE2TYPE: dict[str, str] = {
+    "Encapsulation": EdgeType.OWNER,
+    "Invoke": EdgeType.CALL,
+    "Import": EdgeType.IMPORT,
+    "Ownership": EdgeType.OWNER,
+    "Class Hierarchy": EdgeType.INHERITED,
+}
+
 
 class SemanticParser(BaseGraphParser):
-    color2class: dict[str, str] = {
-        "green": "file",
-        "blue": "class",
-        "orange": "function",
-    }
-
-    node2type: dict[str, str] = {
-        "file": NodeType.FILE,
-        "class": NodeType.CLASS,
-        "function": NodeType.FUNCTION,
-    }
-
-    edge2type: dict[str, str] = {
-        "Encapsulation": EdgeType.OWNER,
-        "Invoke": EdgeType.CALL,
-        "Import": EdgeType.IMPORT,
-        "Ownership": EdgeType.OWNER,
-        "Class Hierarchy": EdgeType.INHERITED,
-    }
+    type: Literal["python_parser"] = "python_parser"
 
     def _clean(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
         """Remove incorrect nodes."""
@@ -45,7 +47,7 @@ class SemanticParser(BaseGraphParser):
 
     def _process(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
         """Change `color` to type and assign `body` to file nodes."""
-        new_types = {node: self.color2class[attr["color"]] for node, attr in graph.nodes(data=True)}
+        new_types = {node: COLOR2CLASS[attr["color"]] for node, attr in graph.nodes(data=True)}
 
         nx.set_node_attributes(graph, new_types, "type")
 
@@ -123,14 +125,14 @@ class SemanticParser(BaseGraphParser):
         for node, attr in graph.nodes(data=True):
             new_node = Node(
                 name=node,
-                type=self.node2type[attr["type"]],
+                type=NODE2TYPE[attr["type"]],
                 code=attr["body"],
                 file_path=attr["file_path"],
             )
             norm_graph.add_node(node, **new_node.model_dump())
 
         for n_from, n_to, edge_data in graph.edges(data=True):
-            new_edge = Edge(type=self.edge2type[edge_data["type"]])
+            new_edge = Edge(type=EDGE2TYPE[edge_data["type"]])
             norm_graph.add_edge(n_from, n_to, **new_edge.model_dump())
         return norm_graph
 

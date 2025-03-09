@@ -10,8 +10,7 @@ class BaseEmbedder(ABC):
         """Generate embeddings for given inputs."""
 
 
-class EmbederConfig(BaseModel):
-
+class BaseEmbederConfig(BaseModel):
     def create(self) -> BaseEmbedder:
         """Factory method that creates instance of BaseEmbedder."""
         raise NotImplementedError

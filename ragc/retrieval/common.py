@@ -63,7 +63,7 @@ class BaseRetrieval(ABC):
 
 
 class BaseRetievalConfig(BaseModel):
-    def create(self, graph: nx.MultiDiGraph, cache_index_path: Path | None = None) -> BaseRetrieval:
+    def create(self, graph: nx.MultiDiGraph) -> BaseRetrieval:
         """Factory method that creates instance of retrieval."""
         raise NotImplementedError
 

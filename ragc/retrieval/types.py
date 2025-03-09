@@ -1,0 +1,3 @@
+from ragc.retrieval.node_retrieval import FileEmbRetrievalConfig, LowGranularityRetrievalConfig
+
+RetrievalConfig = FileEmbRetrievalConfig | LowGranularityRetrievalConfig
