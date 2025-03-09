@@ -20,7 +20,7 @@ class AbstractCacheDataset(ABC):
     def get_repo_id(self, repo_path: Path) -> str:
         return repo_path.name
 
-    def add(self, repo_paths: list[Path], progress_bar: bool = True, overwrite: bool = False) -> list[bool]:
+    def add(self, repo_paths: list[Path], progress_bar: bool = True) -> list[bool]:
         bar = tqdm(repo_paths) if progress_bar else repo_paths
 
         successful_repos = []
@@ -46,14 +46,14 @@ class AbstractCacheDataset(ABC):
                 self.elements.append(loaded)
 
     @abstractmethod
-    def load_single_repo(self, repo_cache_path: Path) -> Any:
+    def load_single_repo(self, repo_cache_path: Path) -> dict[str, Any]:
         """Load repo."""
 
     @abstractmethod
-    def add_single_repo(self, repo_path: Path, repo_cache_path: Path) -> Any:
+    def add_single_repo(self, repo_path: Path, repo_cache_path: Path) -> dict[str, Any]:
         """Add repository to cache."""
 
-    def __getitem__(self, idx: int) -> Any:
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         if self.in_memory:
             return self.elements[idx]
 
@@ -72,12 +72,12 @@ class GraphDataset(AbstractCacheDataset):
         """Add repository to cache."""
         graph = self.parser.parse(repo_path=repo_path)
         save_graph(graph=graph, save_path=repo_cache_path / f"{self.get_repo_id(repo_path)}.gml")
-        return graph
+        return {"graph": graph}
 
     def load_single_repo(self, repo_cache_path: Path) -> nx.MultiDiGraph:
         """Load repo."""
         graph = read_graph(repo_cache_path / f"{repo_cache_path.name}.gml")
-        return graph
+        return {"graph": graph}
 
 
 class RetrievalDataset(GraphDataset):
@@ -91,14 +91,20 @@ class RetrievalDataset(GraphDataset):
         self.retrieval_cfg = retrieval_cfg
         super().__init__(cache_path, parser, in_memory=in_memory)
 
-    def add_single_repo(self, repo_path: Path, repo_cache_path: Path) -> BaseRetrieval:
-        graph = super().add_single_repo(repo_path, repo_cache_path)
-        cache_index_path = repo_cache_path / f"{self.get_repo_id(repo_path)}.npy"  # maybe not .npy in future
-        retrieval = self.retrieval_cfg.create(graph=graph, cache_index_path=cache_index_path)
-        return retrieval
+    def add_single_repo(self, repo_path: Path, repo_cache_path: Path) -> dict[str, Any]:
+        super_data = super().add_single_repo(repo_path, repo_cache_path)
 
-    def load_single_repo(self, repo_cache_path: Path) -> BaseRetrieval:
-        graph = super().load_single_repo(repo_cache_path)
+        cache_index_path = repo_cache_path / f"{self.get_repo_id(repo_path)}.npy"  # maybe not .npy in future
+        retrieval = self.retrieval_cfg.create(graph=super_data["graph"], cache_index_path=cache_index_path)
+
+        super_data["retrieval"] = retrieval
+        return super_data
+
+    def load_single_repo(self, repo_cache_path: Path) -> dict[str, Any]:
+        super_data = super().load_single_repo(repo_cache_path)
+
         cache_index_path = repo_cache_path / f"{repo_cache_path.name}.npy"  # maybe not .npy in future
-        retrieval = self.retrieval_cfg.create(graph=graph, cache_index_path=cache_index_path)
-        return retrieval
+        retrieval = self.retrieval_cfg.create(graph=super_data["graph"], cache_index_path=cache_index_path)
+
+        super_data["retrieval"] = retrieval
+        return super_data
