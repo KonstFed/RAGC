@@ -7,6 +7,7 @@ from semantic_parser import SemanticGraphBuilder
 
 from ragc.graphs.common import (
     BaseGraphParser,
+    BaseGraphParserConfig,
     Edge,
     EdgeType,
     Node,
@@ -35,7 +36,6 @@ EDGE2TYPE: dict[str, str] = {
 
 
 class SemanticParser(BaseGraphParser):
-    type: Literal["python_parser"] = "python_parser"
 
     def _clean(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
         """Remove incorrect nodes."""
@@ -148,3 +148,10 @@ class SemanticParser(BaseGraphParser):
             graph = nx.read_gml(graph_file)
 
         return graph
+
+class SemanticParserConfig(BaseGraphParserConfig):
+    type: Literal["python_parser"] = "python_parser"
+
+    def create(self) -> SemanticParser:
+        """Create instance of SemantcParser."""
+        return SemanticParser(cache_path=self.cache_path)

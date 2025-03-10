@@ -1,36 +1,28 @@
 from pathlib import Path
 
-import networkx as nx
 from pydantic import BaseModel, Field
 
 from ragc.fusion import BaseFusion, FusionConfig
-from ragc.graphs import BaseGraphParser, GraphParserConfig
+from ragc.graphs import GraphParserConfig
 from ragc.retrieval import RetrievalConfig
-from ragc.retrieval.common import BaseRetievalConfig
+from ragc.retrieval.common import BaseRetrieval
 
 
 class Inference:
     def __init__(
-        self, parser: BaseGraphParser, retrieval_cfg: BaseRetievalConfig, fusion: BaseFusion, n_elems: int = 5,
+        self, retrieval: BaseRetrieval, fusion: BaseFusion, n_elems: int = 5,
     ):
-        self.parser = parser
-        self.retrieval_cfg = retrieval_cfg
+        self.retrieval = retrieval
         self.fusion = fusion
         self.n_elems = n_elems
 
     def __call__(
         self,
         query: str,
-        repo_path: Path | str | None = None,
-        graph: nx.MultiDiGraph | None = None,
         ignore_nodes: list[str] | None = None,
     ):
-        if repo_path is not None:
-            graph = self.parser.parse(repo_path=Path(repo_path))
-
         # TODO: надо придумать механизм умного ретриавала (сколько возращать? Пока просто 5 элементов)
-        retrieval = self.retrieval_cfg.create(graph=graph)
-        relevant_nodes = retrieval.retrieve(query=query, n_elems=self.n_elems, ignore_nodes=ignore_nodes)
+        relevant_nodes = self.retrieval.retrieve(query=query, n_elems=self.n_elems, ignore_nodes=ignore_nodes)
         return self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
 
 
@@ -41,13 +33,17 @@ class InferenceConfig(BaseModel):
 
     n_elems: int = 5
 
-    def create(self) -> Inference:
+    def create(self, repo_path: Path) -> Inference:
+        parser = self.parser.create()
+        graph = parser.parse(repo_path)
         fusion = self.fusion.create()
-        return Inference(parser=self.parser, retrieval_cfg=self.retrieval, fusion=fusion, n_elems=self.n_elems)
+        retrieval = self.retrieval.create(graph)
+        return Inference(retrieval=retrieval, fusion=fusion, n_elems=self.n_elems)
 
 if __name__ == "__main__":
     import argparse
-    from ragc.utils import load_config, save_config
+
+    from ragc.utils import load_config
 
     arg_parser = argparse.ArgumentParser(description="Inference parser")
     arg_parser.add_argument("-c", "--config", type=Path, required=True, help="path to .yaml config")

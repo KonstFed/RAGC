@@ -1,3 +1,3 @@
-from ragc.graphs.semantic_python_parser import SemanticParser
+from ragc.graphs.semantic_python_parser import SemanticParserConfig
 
-GraphParserConfig = SemanticParser
+GraphParserConfig = SemanticParserConfig

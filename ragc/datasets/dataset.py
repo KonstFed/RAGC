@@ -127,7 +127,7 @@ class RetrievalDataset(GraphDataset):
         sup_res = super().check_cache(repo_cache_path)
         if not sup_res:
             return False
-        
+
         cache_index_path = repo_cache_path / f"{repo_cache_path.name}.npy"
         return cache_index_path.exists()
 
@@ -141,3 +141,8 @@ class RetrievalDataset(GraphDataset):
 
         super_data["retrieval"] = retrieval
         return super_data
+
+
+class InferenceDataset(RetrievalDataset):
+    def __init__(self, cache_path, parser, retrieval_cfg, in_memory = False):
+        super().__init__(cache_path, parser, retrieval_cfg, in_memory)

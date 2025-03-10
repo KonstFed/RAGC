@@ -7,8 +7,13 @@ import networkx as nx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class BaseGraphParser(BaseModel, ABC):
+class BaseGraphParser(ABC):
     """Base class for parsing repo."""
+
+    cache_path: Path | None = None
+
+    def __init__(self, cache_path: Path | None = None):
+        self.cache_path = cache_path
 
     def parse(self, repo_path: Path) -> nx.MultiDiGraph:
         """Parse repository into graph.
@@ -22,8 +27,15 @@ class BaseGraphParser(BaseModel, ABC):
             nx.MultiDiGraph
 
         """
+        if self.cache_path is not None and self.cache_path.exists():
+            return read_graph(self.cache_path)
+
         graph = self.parse_raw(repo_path=repo_path)
         graph = self.to_standart(graph=graph, repo_path=repo_path)
+
+        if self.cache_path is not None:
+            save_graph(graph=graph, save_path=self.cache_path)
+
         return graph
 
     @abstractmethod
@@ -57,6 +69,15 @@ class BaseGraphParser(BaseModel, ABC):
         extra="ignore",
         frozen=True,
     )
+
+
+class BaseGraphParserConfig(BaseModel, ABC):
+    cache_path: Path | None = None
+
+    @abstractmethod
+    def create(self) -> BaseGraphParser:
+        """Create graph parser."""
+
 
 class NodeType(Enum):
     CLASS = "class"
