@@ -109,7 +109,6 @@ class LowGranularityRetrieval(BaseEmbRetieval):
 
 class EmbRetrievalConfig(BaseRetievalConfig):
     embeder_config: EmbedderConfig
-    cache_index_path: Path | None = None
 
 
 class FileEmbRetrievalConfig(EmbRetrievalConfig):
