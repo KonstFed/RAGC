@@ -1,0 +1,3 @@
+from ragc.graphs.semantic_python_parser import SemanticParserConfig
+
+GraphParserConfig = SemanticParserConfig

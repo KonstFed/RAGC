@@ -1,48 +1,55 @@
 from pathlib import Path
 
-import ollama
+from pydantic import BaseModel, Field
 
-from ragc.graphs import SemanticParser
-from ragc.retrieval.node_retrieval import LowGranularityRetrieval
-from ragc.utils import load_secrets
-
-SECRETS = load_secrets()
-
-
-def generate_prompt(query, relevant_snippets):
-    prompt = "You are an expert programming assistant. Your task is to help me with the following snippets that may help you:\n\n"
-
-    for i, (file_id, code) in enumerate(relevant_snippets, start=1):
-        c_snippet = f"{i}. **Code Snippet {i}** from **{file_id}**:\n```\n{code}\n```\n"
-        prompt += c_snippet + "\n"
-
-    prompt += f"**Question/Task**: {query}\n\n"
-    prompt += """Provide the following in your response:
-- A clear explanation of your solution or answer.
-- The modified or generated code (if applicable).
-- Any additional notes or best practices related to the task.
-
-Let’s get started!"""
-
-    return prompt
+from ragc.fusion import BaseFusion, FusionConfig
+from ragc.graphs import GraphParserConfig
+from ragc.retrieval import RetrievalConfig
+from ragc.retrieval.common import BaseRetrieval
 
 
-def inference(repo_path: Path, query: str) -> str:
-    client = ollama.Client(host=SECRETS["OLLAMA_URL"])
-    parser = SemanticParser()
-    retrieval = LowGranularityRetrieval(repo_path, parser, "unclemusclez/jina-embeddings-v2-base-code")
+class Inference:
+    def __init__(
+        self, retrieval: BaseRetrieval, fusion: BaseFusion, n_elems: int = 5,
+    ):
+        self.retrieval = retrieval
+        self.fusion = fusion
+        self.n_elems = n_elems
 
-    relevant_snippets = retrieval.retrieve(query, 5)
-    prompt = generate_prompt(query, relevant_snippets)
+    def __call__(
+        self,
+        query: str,
+        ignore_nodes: list[str] | None = None,
+    ):
+        # TODO: надо придумать механизм умного ретриавала (сколько возращать? Пока просто 5 элементов)
+        relevant_nodes = self.retrieval.retrieve(query=query, n_elems=self.n_elems, ignore_nodes=ignore_nodes)
+        return self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
 
-    response = client.generate(
-        model="deepseek-r1",
-        prompt=prompt,
-    )
-    return response.response
 
+class InferenceConfig(BaseModel):
+    parser: GraphParserConfig = Field(discriminator="type")
+    retrieval: RetrievalConfig = Field(discriminator="type")
+    fusion: FusionConfig = Field(discriminator="type")
+
+    n_elems: int = 5
+
+    def create(self, repo_path: Path | None = None) -> Inference:
+        parser = self.parser.create()
+        graph = parser.parse(repo_path=repo_path)
+        fusion = self.fusion.create()
+        retrieval = self.retrieval.create(graph)
+        return Inference(retrieval=retrieval, fusion=fusion, n_elems=self.n_elems)
 
 if __name__ == "__main__":
-    repo_path = Path("/home/konstfed/Documents/diplom/RAGC/data/holostyak-bot")
-    query = "Create DB for admin users"
-    print(inference(repo_path, query))
+    import argparse
+
+    from ragc.utils import load_config
+
+    arg_parser = argparse.ArgumentParser(description="Inference parser")
+    arg_parser.add_argument("-c", "--config", type=Path, required=True, help="path to .yaml config")
+    arg_parser.add_argument("-r","--repo_path", type=Path, help="Path to repo to question", required=True)
+    arg_parser.add_argument("query", type=str, help="Your query")
+    args = arg_parser.parse_args()
+    cfg: InferenceConfig = load_config(InferenceConfig, args.config)
+    inference = cfg.create()
+    inference(args.query, repo_path=args.repo_path.absolute().resolve())

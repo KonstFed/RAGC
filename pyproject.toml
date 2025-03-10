@@ -29,13 +29,36 @@ datasets = "^3.3.2"
 ruff = "^0.9.9"
 
 [tool.ruff]  # Configuration for Ruff
-line-length = 120  # Set the maximum line length
-select = [  # Enable specific rules
-    "E",  # Pycodestyle errors
-    "F",  # Pyflakes
-    "I",  # Isort (import sorting)
-    "B",  # flake8-bugbear
-    "C",  # flake8-comprehensions
-    "UP", # pyupgrade (modern Python features)
+
+lint.select = [
+    "ALL"
 ]
-ignore = ["E203"]  # Ignore specific rules
+
+lint.ignore = [
+    "ANN003",
+    "N805",
+    "ANN101",
+    "RUF002",
+    "RUF003",
+    "EM",
+    "FBT",
+    "TRY003",
+    "D100",
+    "D104",
+    "ISC003",
+    "INP001",
+    "D105",
+    "F405",
+    "G004",
+    "S113",
+    "ANN204",
+    "SIM117",
+    "RUF001",
+    "PT019",
+    "S108",
+    "FIX002",
+    "RET504",
+    "D107"
+]
+
+line-length = 120  # Set the maximum line length
