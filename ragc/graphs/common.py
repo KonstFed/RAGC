@@ -15,7 +15,7 @@ class BaseGraphParser(ABC):
     def __init__(self, cache_path: Path | None = None):
         self.cache_path = cache_path
 
-    def parse(self, repo_path: Path) -> nx.MultiDiGraph:
+    def parse(self, repo_path: Path | None = None) -> nx.MultiDiGraph:
         """Parse repository into graph.
 
         Structure of graph is described using `Node` and `Edge` in the same file.
@@ -27,16 +27,19 @@ class BaseGraphParser(ABC):
             nx.MultiDiGraph
 
         """
-        if self.cache_path is not None and self.cache_path.exists():
+        if repo_path is not None:
+            graph = self.parse_raw(repo_path=repo_path)
+            graph = self.to_standart(graph=graph, repo_path=repo_path)
+
+            if self.cache_path is not None:
+                save_graph(graph=graph, save_path=self.cache_path)
+
+            return graph
+
+        elif self.cache_path is not None and self.cache_path.exists():
             return read_graph(self.cache_path)
 
-        graph = self.parse_raw(repo_path=repo_path)
-        graph = self.to_standart(graph=graph, repo_path=repo_path)
-
-        if self.cache_path is not None:
-            save_graph(graph=graph, save_path=self.cache_path)
-
-        return graph
+        raise ValueError("Should provide either repo_path or cache_path")
 
     @abstractmethod
     def parse_raw(self, repo_path: Path) -> nx.MultiDiGraph:

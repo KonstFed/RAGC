@@ -33,9 +33,9 @@ class InferenceConfig(BaseModel):
 
     n_elems: int = 5
 
-    def create(self, repo_path: Path) -> Inference:
+    def create(self, repo_path: Path | None = None) -> Inference:
         parser = self.parser.create()
-        graph = parser.parse(repo_path)
+        graph = parser.parse(repo_path=repo_path)
         fusion = self.fusion.create()
         retrieval = self.retrieval.create(graph)
         return Inference(retrieval=retrieval, fusion=fusion, n_elems=self.n_elems)
