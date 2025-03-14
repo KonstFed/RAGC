@@ -1,6 +1,7 @@
 .venv
 data/*
 .secrets.json
+inference.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
