@@ -27,6 +27,9 @@ class BaseGraphParser(ABC):
             nx.MultiDiGraph
 
         """
+        if self.cache_path is not None and self.cache_path.exists():
+            return read_graph(self.cache_path)
+
         if repo_path is not None:
             graph = self.parse_raw(repo_path=repo_path)
             graph = self.to_standart(graph=graph, repo_path=repo_path)
@@ -35,9 +38,6 @@ class BaseGraphParser(ABC):
                 save_graph(graph=graph, save_path=self.cache_path)
 
             return graph
-
-        elif self.cache_path is not None and self.cache_path.exists():
-            return read_graph(self.cache_path)
 
         raise ValueError("Should provide either repo_path or cache_path")
 
