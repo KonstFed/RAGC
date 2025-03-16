@@ -27,6 +27,8 @@ ollama = "^0.4.7"
 pydot = "^3.0.4"
 datasets = "^3.3.2"
 ruff = "^0.9.9"
+torch = "^2.6.0"
+torch-geometric = "^2.6.1"
 
 [tool.ruff]  # Configuration for Ruff
 
