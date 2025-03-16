@@ -3,6 +3,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import networkx as nx
+from pyvis.network import Network
 
 from ragc.graphs.common import EdgeType, NodeType
 
@@ -70,3 +71,11 @@ def plot_graph(semantic_graph: nx.MultiDiGraph, save_path: Path | str, plot: boo
     if plot:
         img = plt.imread(save_path)
         plt.imshow(img)
+
+def plot_interactive(graph: nx.MultiDiGraph, save_path: Path | str) -> None:
+    draw_g = graph.copy(as_view=True)
+    for node in draw_g.nodes():
+        draw_g.nodes[node].clear()
+    net = Network(notebook=True, directed=True)
+    net.from_nx(draw_g)
+    net.show(save_path)
