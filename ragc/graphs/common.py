@@ -91,11 +91,29 @@ class NodeType(Enum):
         return self.value
 
 
+class NodeTypeNumeric(Enum):
+    FUNCTION = 0
+    CLASS = 1
+    FILE = 2
+
+    def __str__(self):
+        return self.value
+
 class EdgeType(Enum):
     IMPORT = "import"
     OWNER = "owner"
     CALL = "call"
     INHERITED = "inherited"
+
+    def __str__(self):
+        return self.value
+
+
+class EdgeTypeNumeric(Enum):
+    CALL = 0
+    OWNER = 1
+    IMPORT = 2
+    INHERITED = 3
 
     def __str__(self):
         return self.value

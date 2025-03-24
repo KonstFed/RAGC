@@ -34,8 +34,7 @@ def plot_graph(semantic_graph: nx.MultiDiGraph, save_path: Path | str, plot: boo
         EdgeType.INHERITED: "dashed",
     }
 
-
-    node_colors = {n:COLOR_SCHEMA[attr["type"]] for n, attr in graph.nodes(data=True)}
+    node_colors = {n: COLOR_SCHEMA[attr["type"]] for n, attr in graph.nodes(data=True)}
     # nx.set_node_attributes(graph, color_map, "color")
     # node_colors = nx.get_node_attributes(graph, 'color'
 
@@ -72,10 +71,64 @@ def plot_graph(semantic_graph: nx.MultiDiGraph, save_path: Path | str, plot: boo
         img = plt.imread(save_path)
         plt.imshow(img)
 
+
 def plot_interactive(graph: nx.MultiDiGraph, save_path: Path | str) -> None:
-    draw_g = graph.copy(as_view=True)
-    for node in draw_g.nodes():
-        draw_g.nodes[node].clear()
-    net = Network(notebook=True, directed=True)
+    # Create a working copy without modifying original graph
+    draw_g = deepcopy(graph)
+
+    # NODE_COLORS = {
+    #     NodeType.CLASS: "blue",
+    #     NodeType.FILE: "green",
+    #     NodeType.FUNCTION: "orange",
+    # }
+
+    # EDGE_COLORS = {
+    #     EdgeType.OWNER: "gold",
+    #     EdgeType.IMPORT: "red",
+    #     EdgeType.CALL: "green",
+    #     EdgeType.INHERITED: "pink",
+    # }
+
+    NODE_COLORS = {
+        NodeType.CLASS: "#FF6B6B",  # Red
+        NodeType.FUNCTION: "#4D96FF",  # Blue
+        NodeType.FILE: "#6BCB77",  # Green
+    }
+
+    EDGE_COLORS = {
+        EdgeType.IMPORT: "#FFD93D",  # Yellow
+        EdgeType.OWNER: "#8E44AD",   # Darker Purple (more distinct)
+        EdgeType.CALL: "#3498DB",    # Bright Blue (high contrast with purple)
+        EdgeType.INHERITED: "#FF69B4",  # Pink
+    }
+
+    # Apply node styling
+    node_name_map = {}
+    for node, data in draw_g.nodes(data=True):
+        del data["name"]
+        del data["code"]
+        file_path: Path = data.pop("file_path")
+        new_name = node.removeprefix(".".join(file_path.parts).removesuffix(".py") + ".")
+        # node_name_map[node] = new_name
+
+        node_type = data.pop("type")
+        data.update({"color": NODE_COLORS.get(node_type, "#999999"), "shape": "box", "font": {"size": 14}})
+
+    # Apply edge styling
+    for u, v, key, data in draw_g.edges(keys=True, data=True):
+        edge_type = EdgeType(data.pop("type"))
+        data.update({"color": EDGE_COLORS.get(edge_type, "#CCCCCC"), "arrows": "to", "width": 2})
+
+    draw_g = nx.relabel_nodes(draw_g, node_name_map)
+
+    # Generate visualization
+    net = Network(
+        notebook=False,
+        directed=True,
+        cdn_resources="in_line",
+        bgcolor="#FFFFFF",
+        height="800px",
+        width="100%",
+    )
     net.from_nx(draw_g)
-    net.show(save_path)
+    net.show(save_path, notebook=False)
