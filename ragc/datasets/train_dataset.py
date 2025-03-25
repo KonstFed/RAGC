@@ -4,13 +4,14 @@ import networkx as nx
 import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.transforms import BaseTransform
+from torch_geometric.transforms import ComposeFilters
 
 from ragc.graphs.common import EdgeTypeNumeric, NodeTypeNumeric
 from ragc.graphs.transforms import get_call_neighbors, get_callee_subgraph, graph2pyg, mask_node
 from ragc.llm.embedding import BaseEmbedder
 
 
-class PreEmbed(BaseTransform):
+class Embed(BaseTransform):
     """Embeddes all nodes except Files"""
 
     def __init__(self, embedder: BaseEmbedder):
@@ -28,6 +29,11 @@ class PreEmbed(BaseTransform):
 
         data_c.x = node_embeddings
         return data_c
+
+
+class FilterZeroEvalCandidates(BaseTransform):
+    def __call__(self, data: Data) -> bool:
+        return len(get_candidates(data)) != 0
 
 
 def get_target_nodes(graph: Data, node: int, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> torch.Tensor:
@@ -76,7 +82,7 @@ def get_candidates(graph: Data) -> list[tuple[int, torch.Tensor, torch.Tensor]]:
     return candidates
 
 
-class RetrievalEvaluationDataset(InMemoryDataset):
+class GraphDataset(InMemoryDataset):
     def __init__(self, root: str, graphs: list[nx.MultiDiGraph], transform=None, pre_transform=None, pre_filter=None):
         self._graphs = graphs
         super().__init__(root, transform, pre_transform, pre_filter)
@@ -84,53 +90,19 @@ class RetrievalEvaluationDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return "data.pt"
-
-    def _collate_candidate(
-        self, graph: Data, node: int, node_mask: torch.Tensor, edge_mask: torch.Tensor, target_nodes: torch.Tensor
-    ) -> Data:
-        candidate_data = Data(
-            x=graph.x,  # Node features
-            type=graph.type,
-            code=graph.code,
-            edge_index=graph.edge_index,  # Edge indices
-            edge_type=graph.edge_type,  # Edge types
-            y=target_nodes,  # Target nodes (labels)
-            node_mask=node_mask,  # Node mask for the candidate
-            edge_mask=edge_mask,  # Edge mask for the candidate
-            x_node=node,  # The function node for which the candidate was generated
-        )
-        return candidate_data
+        return ["original_graph.pt"]
 
     def process(self) -> None:
         data_list = []
         for graph in self._graphs:
             pyg_graph = graph2pyg(graph)
-
-            if self.pre_transform is not None:
-                pyg_graph = self.pre_transform(pyg_graph)
-
-            candidates = get_candidates(pyg_graph)
-            if len(candidates) == 0:
-                continue
-
-            for candidate in candidates:
-                f_node, node_mask, edge_mask, target_nodes = candidate
-                candidate_data = self._collate_candidate(pyg_graph, f_node, node_mask, edge_mask, target_nodes)
-
-                # Create a Data object for each candidate
-
-                # Append the candidate data to the list
-                data_list.append(candidate_data)
+            data_list.append(pyg_graph)
 
         if self.pre_transform is not None:
             data_list = [self.pre_transform(d) for d in data_list]
 
         if self.pre_filter is not None:
-            data_list = [self.pre_filter(d) for d in data_list]
-
-        # Collate the list of Data objects into a single large Data object
-        data, slices = self.collate(data_list)
+            data_list = list(filter(self.pre_filter, data_list))
 
         # Save the processed data
-        torch.save((data, slices), self.processed_paths[0])
+        self.save(data_list, self.processed_paths[0])

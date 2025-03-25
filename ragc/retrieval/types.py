@@ -1,3 +1,3 @@
-from ragc.retrieval.node_retrieval import FileEmbRetrievalConfig, LowGranularityRetrievalConfig
+from ragc.retrieval.classical import SimpleEmbRetrievalConfig, PCSTConfig
 
-RetrievalConfig = FileEmbRetrievalConfig | LowGranularityRetrievalConfig
+RetrievalConfig = SimpleEmbRetrievalConfig | PCSTConfig

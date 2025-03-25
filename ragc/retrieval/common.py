@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import torch
+from torch_geometric.data import Data
 import networkx as nx
 from pydantic import BaseModel, ConfigDict
 
@@ -10,7 +12,18 @@ from ragc.graphs.common import Node
 class BaseRetrieval(ABC):
     """Базовый класс для всех retrieval."""
 
-    def __init__(self, graph: nx.MultiDiGraph, cache_index_path: Path | None = None) -> None:
+    def __init__(self, graph: Data) -> None:
+        self.graph = graph
+
+
+    @abstractmethod
+    def retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+        """Получить релевантные куски кода."""
+        raise NotImplementedError
+
+
+class BaseCachedRetrieval(BaseRetrieval):
+    def __init__(self, graph: Data, cache_index_path: Path | None = None) -> None:
         self.cache_index_path = cache_index_path
         self.graph = graph
 
@@ -56,20 +69,16 @@ class BaseRetrieval(ABC):
         self._index()
         self.save_index(path=index_path)
 
-    @abstractmethod
-    def retrieve(self, query: str, n_elems: int, ignore_nodes: list[str] | None = None) -> list[Node]:
-        """Получить релевантные куски кода."""
-        raise NotImplementedError
-
 
 class BaseRetievalConfig(BaseModel):
-    cache_index_path: Path | None = None
+    type: str
 
-    def create(self, graph: nx.MultiDiGraph) -> BaseRetrieval:
+    def create(self, graph: Data) -> BaseRetrieval:
         """Factory method that creates instance of retrieval."""
         raise NotImplementedError
 
     model_config = ConfigDict(
         extra="ignore",
         frozen=True,
+        arbitrary_types_allowed=True,
     )
