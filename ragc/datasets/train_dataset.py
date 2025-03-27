@@ -30,58 +30,6 @@ class Embed(BaseTransform):
         data_c.x = node_embeddings
         return data_c
 
-
-class FilterZeroEvalCandidates(BaseTransform):
-    def __call__(self, data: Data) -> bool:
-        return len(get_candidates(data)) != 0
-
-
-def get_target_nodes(graph: Data, node: int, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> torch.Tensor:
-    call_edges_mask = (
-        (graph.edge_index[0] == node) & (graph.edge_type == EdgeTypeNumeric.CALL.value) & (graph.edge_index[1] != node)
-    )
-    # remove all known connections
-    call_edges_mask = call_edges_mask & ~edge_mask
-
-    # all call nodes
-    nodes = graph.edge_index[1][call_edges_mask]
-    nodes = torch.unique(nodes)
-
-    # target is only in known graph
-    known_nodes = torch.where(node_mask)[0]
-    nodes = torch.tensor(list(set(nodes.tolist()) & set(known_nodes.tolist())))
-    return nodes
-
-
-def get_candidates(graph: Data) -> list[tuple[int, torch.Tensor, torch.Tensor]]:
-    func_nodes = torch.where(graph.type == NodeTypeNumeric.FUNCTION.value)[0]
-
-    candidates = []
-    for i, f_node in enumerate(func_nodes):
-        caller_nodes, _ = get_call_neighbors(graph=graph, node=int(f_node), out=True)
-        if len(caller_nodes) < 1:
-            continue
-
-        callee_mask, callee_edge_mask = get_callee_subgraph(graph=graph, node=int(f_node))
-
-        callee_mask = ~callee_mask
-        callee_edge_mask = ~callee_edge_mask
-
-        node_mask, edge_mask = mask_node(graph=graph, node=f_node)
-
-        edge_mask = callee_edge_mask & edge_mask
-        node_mask = callee_mask & node_mask
-
-        target_nodes = get_target_nodes(graph, f_node, node_mask, edge_mask)
-
-        if len(target_nodes) == 0 or node_mask.sum() < 5:
-            continue
-
-        candidates.append((f_node, node_mask, edge_mask, target_nodes))
-
-    return candidates
-
-
 class GraphDataset(InMemoryDataset):
     def __init__(self, root: str, graphs: list[nx.MultiDiGraph], transform=None, pre_transform=None, pre_filter=None):
         self._graphs = graphs

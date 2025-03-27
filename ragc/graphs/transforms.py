@@ -86,3 +86,15 @@ def mask_node(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
     node_mask = torch.ones(graph.num_nodes, dtype=torch.bool)
     node_mask[node] = False
     return node_mask, edge_mask
+
+
+def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> Data:
+    return Data(
+        x=graph.x[node_mask],
+        edge_index=graph.edge_index[:, edge_mask],
+        name=graph.name[node_mask],
+        type=graph.type[node_mask],
+        code=graph.code[node_mask],
+        file_path=graph.code[node_mask],
+        edge_type=graph.edge_type[edge_mask],
+    )
