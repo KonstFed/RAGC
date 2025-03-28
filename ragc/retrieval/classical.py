@@ -34,7 +34,7 @@ class SimpleEmbRetrieval(BaseRetrieval):
         query = F.normalize(query, p=2, dim=0)
         cosine_dist = self.embeddings @ query
         cosine_dist = torch.abs(cosine_dist)
-        _, indices = torch.topk(cosine_dist, k=self.ntop)
+        _, indices = torch.topk(cosine_dist, k=min(self.ntop, len(cosine_dist)))
         return self.ind2node[indices]
 
 
@@ -53,7 +53,8 @@ def cosine_distance(embeddings: torch.Tensor, query_emb: torch.Tensor):
     return dist
 
 
-def get_prize_and_cost(graph: Data, query_emb: torch.Tensor,k: int = 5) -> tuple[torch.Tensor, torch.Tensor]:
+def get_prize_and_cost(graph: Data, query_emb: torch.Tensor, k: int = 5) -> tuple[torch.Tensor, torch.Tensor]:
+    k = min(k, graph.num_nodes)
     not_file_mask = graph.type != NodeTypeNumeric.FILE.value
 
     distances = -torch.ones_like(not_file_mask, dtype=graph.x.dtype)

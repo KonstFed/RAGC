@@ -2,11 +2,12 @@ import warnings
 
 import torch
 from torch_geometric.data import Data
+from tqdm import trange
 
-from ragc.retrieval.common import BaseRetievalConfig
-from ragc.datasets.train_dataset import GraphDataset
+from ragc.datasets.train_dataset import TorchGraphDataset
 from ragc.graphs.common import EdgeTypeNumeric, NodeTypeNumeric
-from ragc.graphs.transforms import get_call_neighbors, get_callee_subgraph, graph2pyg, mask_node, apply_mask
+from ragc.graphs.transforms import apply_mask, get_call_neighbors, get_callee_subgraph, graph2pyg, mask_node
+from ragc.retrieval.common import BaseRetievalConfig
 
 
 def _get_target_nodes(graph: Data, node: int, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> torch.Tensor:
@@ -56,23 +57,32 @@ def _get_eval_candidates(graph: Data) -> list[tuple[int, torch.Tensor, torch.Ten
 
 
 def make_predictions(
-    dataset: GraphDataset, retreival_cfg: BaseRetievalConfig
+    dataset: TorchGraphDataset,
+    retreival_cfg: BaseRetievalConfig,
+    max_cand_per_graph: int = 40,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     predicted_results = []
     target_results = []
-    for i in range(len(dataset)):
+    for i in trange(len(dataset)):
         graph = dataset[i]
         candidates = _get_eval_candidates(graph)
 
         if len(candidates) == 0:
             warnings.warn(f"graph with index {i} got zero evaluation candidates. Thus, it is skipped", stacklevel=1)
 
+        candidates = sorted(candidates, key=lambda k: -len(k[-1]))
+        candidates = candidates[:min(len(candidates), max_cand_per_graph)]
+
         for predict_node, node_mask, edge_mask, target_nodes in candidates:
             eval_graph = apply_mask(graph, node_mask, edge_mask)
+            map2og = torch.nonzero(node_mask).squeeze()
             retrieval = retreival_cfg.create(eval_graph)
 
             # пока что используем эбмеддинг кода, но нужно доставать, docstring
             predicted_nodes = retrieval.retrieve(graph.x[predict_node])
+
+            # return node ids to global naming
+            predicted_nodes = map2og[predicted_nodes]
             predicted_results.append(predicted_nodes)
             target_results.append(target_nodes)
 
@@ -87,6 +97,6 @@ def count_recall(predicted: list[torch.Tensor], target: list[torch.Tensor]) -> f
     recall = []
     for pred_nodes, target_nodes in zip(predicted, target, strict=True):
         c_recall = set(pred_nodes.tolist()).intersection(target_nodes.tolist())
-        recall.append(c_recall)
+        recall.append(len(c_recall))
 
     return sum(recall) / len(recall)

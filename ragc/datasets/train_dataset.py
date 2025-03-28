@@ -22,7 +22,7 @@ class Embed(BaseTransform):
         data_c = copy.copy(data)
         not_file_mask = data_c.type != NodeTypeNumeric.FILE.value
         all_code = [data_c.code[i] for i in torch.where(not_file_mask)[0]]
-        embeddings = torch.from_numpy(self.embedder.embed(all_code))
+        embeddings = self.embedder.embed(all_code)
         # embeddings should be 2d tensor
         node_embeddings = torch.zeros(data.num_nodes, embeddings.shape[1])
         node_embeddings[not_file_mask] = embeddings
@@ -30,7 +30,7 @@ class Embed(BaseTransform):
         data_c.x = node_embeddings
         return data_c
 
-class GraphDataset(InMemoryDataset):
+class TorchGraphDataset(InMemoryDataset):
     def __init__(self, root: str, graphs: list[nx.MultiDiGraph], transform=None, pre_transform=None, pre_filter=None):
         self._graphs = graphs
         super().__init__(root, transform, pre_transform, pre_filter)

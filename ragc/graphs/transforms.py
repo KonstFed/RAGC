@@ -89,12 +89,20 @@ def mask_node(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
 
 
 def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> Data:
+    # Get indices of kept nodes
+    kept_nodes = torch.where(node_mask)[0]
+
+    # Create mapping from original node indices to new indices
+    idx_map = torch.zeros_like(node_mask, dtype=torch.long)
+    idx_map[kept_nodes] = torch.arange(len(kept_nodes), device=node_mask.device)
+
+    # Apply masks and remap edge indices
     return Data(
         x=graph.x[node_mask],
-        edge_index=graph.edge_index[:, edge_mask],
-        name=graph.name[node_mask],
-        type=graph.type[node_mask],
-        code=graph.code[node_mask],
-        file_path=graph.code[node_mask],
-        edge_type=graph.edge_type[edge_mask],
+        edge_index=idx_map[graph.edge_index[:, edge_mask]],
+        name=[graph.name[i] for i in kept_nodes] if graph.name else None,
+        type=graph.type[node_mask] if graph.type is not None else None,
+        code=[graph.code[i] for i in kept_nodes] if graph.code else None,
+        file_path=[graph.file_path[i] for i in kept_nodes] if graph.file_path else None,
+        edge_type=graph.edge_type[edge_mask] if graph.edge_type is not None else None,
     )
