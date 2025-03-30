@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 from typing import Literal
 
 import networkx as nx
+import black
 from semantic_parser import SemanticGraphBuilder
 
 from ragc.graphs.common import (
@@ -13,6 +14,7 @@ from ragc.graphs.common import (
     Node,
     NodeType,
 )
+from ragc.graphs.utils import extract_function_info, extract_class_info
 
 COLOR2CLASS: dict[str, str] = {
     "green": "file",
@@ -36,7 +38,6 @@ EDGE2TYPE: dict[str, str] = {
 
 
 class SemanticParser(BaseGraphParser):
-
     def _clean(self, graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
         """Remove incorrect nodes."""
         bad_nodes = [n for n in graph.nodes() if " " in n.strip()]
@@ -102,6 +103,8 @@ class SemanticParser(BaseGraphParser):
         for _, attr in graph.nodes(data=True):
             if attr["type"] == "file":
                 continue
+
+            # fix that first line has different ident
             code = attr["body"]
             ident_pos = attr["start_point"][1]
             code = " " * ident_pos + code
@@ -111,7 +114,15 @@ class SemanticParser(BaseGraphParser):
             min_indent = min((len(line) - len(line.lstrip())) for line in lines)
             stripped_lines = [line[min_indent:] if line.strip() else line for line in lines]
             code = "\n".join(stripped_lines)
-            attr["body"] = code
+
+            try:
+                formatted_code = black.format_str(code, mode=black.Mode())
+            except Exception as e:
+                # if fails we just use unformatted
+                formatted_code = code
+
+            attr["body"] = formatted_code
+
         return graph
 
     def to_standart(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
@@ -123,11 +134,28 @@ class SemanticParser(BaseGraphParser):
 
         norm_graph = nx.MultiDiGraph()
         for node, attr in graph.nodes(data=True):
+            code = attr["body"]
+
+            signature = ""
+            docstring = ""
+
+            node_type = NODE2TYPE[attr["type"]]
+
+            if node_type == NodeType.FUNCTION:
+                ext_signature, ext_docstring = extract_function_info(code)
+                signature = signature if ext_signature is None else ext_signature
+                docstring = docstring if ext_docstring is None else ext_docstring
+            elif node_type == NodeType.CLASS:
+                ext_docstring = extract_class_info(code)
+                docstring = docstring if ext_docstring is None else ext_docstring
+
             new_node = Node(
                 name=node,
                 type=NODE2TYPE[attr["type"]],
-                code=attr["body"],
+                code=code,
                 file_path=attr["file_path"],
+                docstring=docstring,
+                signature=signature,
             )
             norm_graph.add_node(node, **new_node.model_dump())
 
@@ -148,6 +176,7 @@ class SemanticParser(BaseGraphParser):
             graph = nx.read_gml(graph_file)
 
         return graph
+
 
 class SemanticParserConfig(BaseGraphParserConfig):
     type: Literal["python_parser"] = "python_parser"

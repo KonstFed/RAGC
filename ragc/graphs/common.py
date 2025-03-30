@@ -86,6 +86,8 @@ class NodeType(Enum):
     CLASS = "class"
     FUNCTION = "function"
     FILE = "file"
+    RESIDUAL = "residual"
+
 
     def __str__(self):
         return self.value
@@ -95,6 +97,7 @@ class NodeTypeNumeric(Enum):
     FUNCTION = 0
     CLASS = 1
     FILE = 2
+    RESIDUAL = 3
 
     def __str__(self):
         return self.value
@@ -122,6 +125,8 @@ class EdgeTypeNumeric(Enum):
 class Node(BaseModel):
     name: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+$")]
     type: NodeType
+    docstring: str
+    signature: str
     code: str
     file_path: Path
 

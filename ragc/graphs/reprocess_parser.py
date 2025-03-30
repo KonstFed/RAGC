@@ -11,7 +11,7 @@ from reprocess.re_processors import (
     JsonConverter,
 )
 
-from .common import BaseGraphParser
+from ragc.graphs.common import BaseGraphParser, BaseGraphParserConfig, NodeType, EdgeType, Node, Edge
 
 # TODO: (проверяли на питоне только) проблема тут что если функция вызывает функцию класса.
 # то он поставит ссылку до создания обьекта но не до вызова функции.
@@ -71,7 +71,7 @@ class ReprocessParser(BaseGraphParser):
 
         self.composition = Compose(composition_list)
 
-    def parse(self, repo_path: Path) -> nx.DiGraph:
+    def parse_raw(self, repo_path: Path) -> dict:
         with TemporaryDirectory() as tmp_p:
             container = ReContainer(
                 repo_path.name,
@@ -83,7 +83,15 @@ class ReprocessParser(BaseGraphParser):
             with (Path(tmp_p) / repo_path.name / "data.json").open("r") as f:
                 graph = json.load(f)
 
-        return _process_graph(graph=graph)
+        return graph
+
+    def to_standart(self, graph: dict, repo_path: Path):
+        graph = _process_graph(graph=graph)
+        standart_graph = nx.MultiDiGraph()
+        for node in graph:
+            Node(name=graph[node])
+            standart_graph
+
 
     @staticmethod
     def to_file_only(graph: nx.DiGraph):
@@ -133,3 +141,9 @@ class ReprocessParser(BaseGraphParser):
     def parse_into_files(self, repo_path: Path) -> nx.DiGraph:
         general_graph = self.parse(repo_path=repo_path)
         return ReprocessParser.to_file_only(general_graph)
+
+
+class ReprocessParserConfig(BaseGraphParserConfig):
+
+    def create(self) -> ReprocessParser:
+        return ReprocessParser()
