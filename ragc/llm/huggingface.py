@@ -15,6 +15,8 @@ class HuggingFaceEmbedder(BaseEmbedder):
 
         if max_length is None:
             self.max_length = self.tokenizer.model_max_length
+        else:
+            self.max_length = max_length
 
         if store_in_gpu:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -32,7 +34,6 @@ class HuggingFaceEmbedder(BaseEmbedder):
 
         for i in range(0, len(inputs), batch_size):
             batch = inputs[i : min(i + batch_size, len(inputs))]
-
             tokenized_inputs = self.tokenizer(
                 batch,
                 padding=True,

@@ -2,6 +2,7 @@ import copy
 
 import networkx as nx
 import torch
+from tqdm import tqdm
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.transforms import ComposeFilters
@@ -22,7 +23,7 @@ class Embed(BaseTransform):
         data_c = copy.copy(data)
         not_file_mask = data_c.type != NodeTypeNumeric.FILE.value
         all_code = [data_c.code[i] for i in torch.where(not_file_mask)[0]]
-        embeddings = self.embedder.embed(all_code)
+        embeddings = self.embedder.embed(all_code).cpu()
         # embeddings should be 2d tensor
         node_embeddings = torch.zeros(data.num_nodes, embeddings.shape[1])
         node_embeddings[not_file_mask] = embeddings
@@ -47,7 +48,7 @@ class TorchGraphDataset(InMemoryDataset):
             data_list.append(pyg_graph)
 
         if self.pre_transform is not None:
-            data_list = [self.pre_transform(d) for d in data_list]
+            data_list = [self.pre_transform(d) for d in tqdm(data_list)]
 
         if self.pre_filter is not None:
             data_list = list(filter(self.pre_filter, data_list))
