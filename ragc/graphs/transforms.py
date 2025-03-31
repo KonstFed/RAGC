@@ -36,7 +36,6 @@ def reverse_inheritance(graph: nx.MultiDiGraph) -> None:
 
 def graph2pyg(graph: nx.MultiDiGraph) -> Data:
     graph = deepcopy(graph)
-    reverse_inheritance(graph)
     pyg_graph = from_networkx(graph)
     pyg_graph.edge_type = torch.tensor([edgetype2idx[edge] for edge in pyg_graph.edge_type])
     pyg_graph.type = torch.tensor([nodetype2idx[node] for node in pyg_graph.type])
