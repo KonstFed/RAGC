@@ -8,7 +8,6 @@ from ragc.utils import load_config
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--save-path", type=Path, required=True, help="Path to save dataset")
     parser.add_argument("--evocodebench", type=Path, required=False, help="Path to evocodebench repos")
     parser.add_argument("config", type=Path, help="Path to dataset config")
     args = parser.parse_args()
