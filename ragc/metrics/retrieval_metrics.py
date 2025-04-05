@@ -6,7 +6,7 @@ from tqdm import trange
 
 from ragc.datasets.train_dataset import TorchGraphDataset
 from ragc.graphs.common import EdgeTypeNumeric, NodeTypeNumeric
-from ragc.graphs.transforms import apply_mask, get_call_neighbors, get_callee_subgraph, graph2pyg, mask_node
+from ragc.graphs.utils import apply_mask, get_call_neighbors, get_callee_mask
 from ragc.retrieval.common import BaseRetievalConfig
 
 
@@ -36,15 +36,7 @@ def _get_eval_candidates(graph: Data) -> list[tuple[int, torch.Tensor, torch.Ten
         if len(caller_nodes) < 1:
             continue
 
-        callee_mask, callee_edge_mask = get_callee_subgraph(graph=graph, node=int(f_node))
-
-        callee_mask = ~callee_mask
-        callee_edge_mask = ~callee_edge_mask
-
-        node_mask, edge_mask = mask_node(graph=graph, node=f_node)
-
-        edge_mask = callee_edge_mask & edge_mask
-        node_mask = callee_mask & node_mask
+        node_mask, edge_mask = get_callee_mask(graph=graph, node=int(f_node))
 
         target_nodes = _get_target_nodes(graph, f_node, node_mask, edge_mask)
 

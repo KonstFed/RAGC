@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
@@ -14,7 +15,7 @@ from ragc.graphs.common import (
     Node,
     NodeType,
 )
-from ragc.graphs.utils import extract_function_info, extract_class_info
+from ragc.graphs.ast_tools import extract_function_info, extract_class_info
 
 COLOR2CLASS: dict[str, str] = {
     "green": "file",
@@ -48,6 +49,10 @@ class SemanticParser(BaseGraphParser):
 
     def _process(self, graph: nx.MultiDiGraph, repo_path: Path) -> nx.MultiDiGraph:
         """Change `color` to type and assign `body` to file nodes."""
+        node2delete = [node for node, attr in graph.nodes(data=True) if "color" not in attr]
+        for node in node2delete:
+            graph.remove_node(node)
+
         new_types = {node: COLOR2CLASS[attr["color"]] for node, attr in graph.nodes(data=True)}
 
         nx.set_node_attributes(graph, new_types, "type")
@@ -142,12 +147,18 @@ class SemanticParser(BaseGraphParser):
             node_type = NODE2TYPE[attr["type"]]
 
             if node_type == NodeType.FUNCTION:
-                ext_signature, ext_docstring = extract_function_info(code)
-                signature = signature if ext_signature is None else ext_signature
-                docstring = docstring if ext_docstring is None else ext_docstring
+                try:
+                    ext_signature, ext_docstring = extract_function_info(code)
+                    signature = signature if ext_signature is None else ext_signature
+                    docstring = docstring if ext_docstring is None else ext_docstring
+                except Exception as e:
+                    warnings.warn(f"Failed to extract function info {node}", stacklevel=1)
             elif node_type == NodeType.CLASS:
-                ext_docstring = extract_class_info(code)
-                docstring = docstring if ext_docstring is None else ext_docstring
+                try:
+                    ext_docstring = extract_class_info(code)
+                    docstring = docstring if ext_docstring is None else ext_docstring
+                except Exception as e:
+                    warnings.warn(f"Failed to extract class info {node}", stacklevel=1)
 
             new_node = Node(
                 name=node,

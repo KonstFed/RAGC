@@ -1,107 +1,190 @@
-from copy import deepcopy
+import copy
+from abc import ABC, abstractmethod
+from typing import Literal
 
-import networkx as nx
 import torch
-from torch_geometric.data import Data
-from torch_geometric.utils.convert import from_networkx
+from pydantic import BaseModel
+import networkx as nx
+from torch_geometric.data import Data, HeteroData
+from torch_geometric.transforms import BaseTransform
 
-from ragc.graphs.common import EdgeType, EdgeTypeNumeric, NodeType, NodeTypeNumeric
+from ragc.graphs.common import EdgeTypeNumeric, NodeTypeNumeric
+from ragc.llm.embedding import BaseEmbederConfig, BaseEmbedder
+from ragc.llm.types import EmbedderConfig
+from ragc.graphs.utils import get_callee_mask, apply_mask, mask_node, graph2pyg
 
-nodetype2idx = {
-    NodeType.FUNCTION: NodeTypeNumeric.FUNCTION.value,
-    NodeType.CLASS: NodeTypeNumeric.CLASS.value,
-    NodeType.FILE: NodeTypeNumeric.FILE.value,
-}
+# For GNN which combinations of edges and nodes are allowed
+ALLOWED_COMBINATIONS: list[tuple[NodeTypeNumeric, EdgeTypeNumeric, NodeTypeNumeric]] = []
 
-edgetype2idx = {
-    EdgeType.CALL.value: EdgeTypeNumeric.CALL.value,
-    EdgeType.OWNER.value: EdgeTypeNumeric.OWNER.value,
-    EdgeType.IMPORT.value: EdgeTypeNumeric.IMPORT.value,
-    EdgeType.INHERITED.value: EdgeTypeNumeric.INHERITED.value,
-}
+# OWNERSHIP
+ALLOWED_COMBINATIONS.extend(
+    [
+        (f, EdgeTypeNumeric.OWNER, s)
+        for f in [NodeTypeNumeric.FILE, NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]
+        for s in [NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]
+    ],
+)
 
+# CALLS
+ALLOWED_COMBINATIONS.extend(
+    [
+        (f, EdgeTypeNumeric.CALL, NodeTypeNumeric.FUNCTION)
+        for f in [NodeTypeNumeric.FILE, NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]
+    ],
+)
 
-def reverse_inheritance(graph: nx.MultiDiGraph) -> None:
-    remove_edges = []
-    for u, v, data in graph.edges(data=True):
-        if data["type"] != EdgeType.INHERITED.value:
-            continue
+# IMPORTS
+ALLOWED_COMBINATIONS.extend(
+    [
+        (NodeTypeNumeric.FILE, EdgeTypeNumeric.IMPORT, s)
+        for s in [NodeTypeNumeric.FILE, NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]
+    ],
+)
 
-        remove_edges.append((u, v))
-
-    for u, v in remove_edges:
-        graph.remove_edge(u, v)
-        graph.add_edge(u, v, type=EdgeType.INHERITED.value)
-
-
-def graph2pyg(graph: nx.MultiDiGraph) -> Data:
-    graph = deepcopy(graph)
-    pyg_graph = from_networkx(graph)
-    pyg_graph.edge_type = torch.tensor([edgetype2idx[edge] for edge in pyg_graph.edge_type])
-    pyg_graph.type = torch.tensor([nodetype2idx[node] for node in pyg_graph.type])
-    return pyg_graph
-
-
-def get_call_neighbors(graph: Data, node: int, out: bool = True) -> tuple[list[int], torch.Tensor]:
-    dir_idx = 0 if out else 1
-    opp_dir_idx = (dir_idx + 1) % 2
-
-    mask = graph.edge_index[dir_idx] == node
-    mask = mask & (graph.edge_index[opp_dir_idx] != node)
-
-    out_edge_idx = torch.where(mask)[0]
-    out_edge_idx = [ind for ind in out_edge_idx if graph.edge_type[ind] == EdgeTypeNumeric.CALL.value]
-    out_edge_idx = torch.tensor(out_edge_idx)
-
-    if len(out_edge_idx) == 0:
-        return [], None
-    successor_nodes = graph.edge_index[opp_dir_idx][out_edge_idx].tolist()
-    return successor_nodes, out_edge_idx
+# INHERITANCE
+ALLOWED_COMBINATIONS.append((NodeTypeNumeric.CLASS, EdgeTypeNumeric.INHERITED, NodeTypeNumeric.CLASS))
 
 
-def get_callee_subgraph(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
-    visited = set()
-    stack = [node]
-    while len(stack) > 0:
-        cur_node = stack.pop(0)
-        callees_nodes, _ = get_call_neighbors(graph=graph, node=cur_node, out=False)
-        callees_nodes = set(callees_nodes)
-        stack.extend(callees_nodes.difference(visited))
-        visited = visited.union(callees_nodes)
+class BaseTransformConfig(BaseModel, ABC):
+    """Config for transforms for graphs"""
 
-    node_mask = torch.zeros(graph.num_nodes, dtype=torch.bool)
-    edge_mask = torch.zeros(graph.num_edges, dtype=torch.bool)
-
-    for node in visited:
-        node_mask[node] = True
-        node_edge_mask = (graph.edge_index[0] == node) | (graph.edge_index[1] == node)
-        edge_mask = edge_mask | node_edge_mask & (graph.edge_type == EdgeTypeNumeric.CALL.value)
-    return node_mask, edge_mask
+    @abstractmethod
+    def create(self) -> BaseTransform:
+        raise NotImplementedError
 
 
-def mask_node(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
-    edge_mask = (graph.edge_index[0] == node) | (graph.edge_index[1] == node)
-    edge_mask = ~edge_mask
-    node_mask = torch.ones(graph.num_nodes, dtype=torch.bool)
-    node_mask[node] = False
-    return node_mask, edge_mask
+class ToPYG(BaseTransform, BaseTransformConfig):
+    type: Literal["to_pyg"] = "to_pyg"
+
+    def forward(self, data: nx.MultiDiGraph) -> Data:
+        return graph2pyg(data)
+
+    def create(self):
+        return self
 
 
-def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> Data:
-    # Get indices of kept nodes
-    kept_nodes = torch.where(node_mask)[0]
+class ToHetero(BaseTransform, BaseTransformConfig):
+    type: Literal["to_hetero"] = "to_hetero"
 
-    # Create mapping from original node indices to new indices
-    idx_map = torch.zeros_like(node_mask, dtype=torch.long)
-    idx_map[kept_nodes] = torch.arange(len(kept_nodes), device=node_mask.device)
+    @classmethod
+    def to_hetero(graph: Data) -> HeteroData:
+        """Transform graph to HeteroData for simplier training."""
+        h_graph = HeteroData()
 
-    # Apply masks and remap edge indices
-    return Data(
-        x=graph.x[node_mask],
-        edge_index=idx_map[graph.edge_index[:, edge_mask]],
-        name=[graph.name[i] for i in kept_nodes] if graph.name else None,
-        type=graph.type[node_mask] if graph.type is not None else None,
-        code=[graph.code[i] for i in kept_nodes] if graph.code else None,
-        file_path=[graph.file_path[i] for i in kept_nodes] if graph.file_path else None,
-        edge_type=graph.edge_type[edge_mask] if graph.edge_type is not None else None,
-    )
+        node_map_by_cat = {}
+
+        for node_type in [NodeTypeNumeric.FILE, NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]:
+            node_mask = graph.type == node_type.value
+            node_idx = torch.where(node_mask)[0]
+
+            idx_map = -torch.ones_like(node_mask, dtype=torch.long)
+            idx_map[node_idx] = torch.arange(len(node_idx), device=node_mask.device)
+            node_map_by_cat[node_type] = idx_map
+
+            h_graph[node_type.name].x = graph.x[node_mask]
+            h_graph[node_type.name].signature = [graph.signature[i] for i in node_idx]
+            h_graph[node_type.name].docstring = [graph.docstring[i] for i in node_idx]
+            h_graph[node_type.name].name = [graph.name[i] for i in node_idx]
+
+        for f, edge, s in ALLOWED_COMBINATIONS:
+            f_types = graph.type[graph.edge_index[0, :]]
+            f_mask = f_types == f.value
+            s_types = graph.type[graph.edge_index[1, :]]
+            s_mask = s_types == s.value
+
+            edge_mask = (graph.edge_type == edge.value) & f_mask & s_mask
+
+            cur_edge_index = graph.edge_index[:, edge_mask]
+            cur_edge_index[0, :] = node_map_by_cat[f][cur_edge_index[0, :]]
+            cur_edge_index[1, :] = node_map_by_cat[s][cur_edge_index[1, :]]
+
+            h_graph[f.name, edge.name, s.name].edge_index = cur_edge_index
+
+        return h_graph
+
+    def forward(self, data: Data) -> HeteroData:
+        return self.to_hetero(data)
+
+    def create(self):
+        return self
+
+
+class EmbedTransform(BaseTransform):
+    """Embeddes all nodes except Files."""
+
+    def __init__(self, embedder: BaseEmbedder):
+        self.embedder = embedder
+        super().__init__()
+
+    def forward(self, data: Data) -> Data:
+        data_c = copy.copy(data)
+        # SUGGESTION: maybe not ignore file, make a parameter
+        not_file_mask = data_c.type != NodeTypeNumeric.FILE.value
+        all_code = [data_c.code[i] for i in torch.where(not_file_mask)[0]]
+        embeddings = self.embedder.embed(all_code).cpu()
+        # embeddings should be 2d tensor
+        node_embeddings = torch.zeros(data.num_nodes, embeddings.shape[1])
+        node_embeddings[not_file_mask] = embeddings
+
+        data_c.x = node_embeddings
+        return data_c
+
+
+class EmbedTransformConfig(BaseTransformConfig):
+    type: Literal["embed_transform"] = "embed_transform"
+    embedder: EmbedderConfig
+
+    def create(self) -> EmbedTransform:
+        embedder = self.embedder.create()
+        return EmbedTransform(embedder=embedder)
+
+
+class MaskNodes(BaseTransform):
+    """Mask given nodes from the graph including all callees nodes."""
+
+    def __init__(self, nodes2mask: list[str], mask_callee: bool):
+        self.nodes2mask = nodes2mask
+        self.mask_callee = mask_callee
+
+    def _find_node(self, graph: Data, node: str) -> int:
+        for i, name in enumerate(graph.name):
+            if name == node:
+                return i
+
+        raise ValueError("Node not found")
+
+    def forward(self, data: Data) -> Data:
+        node_mask = None
+        edge_mask = None
+        for node_name in self.nodes2mask:
+            node = self._find_node(graph=data, node=node_name)
+
+            if self.mask_callee:
+                cur_node_mask, cur_edge_mask = get_callee_mask(graph=data, node=node)
+            else:
+                cur_node_mask, cur_edge_mask = mask_node(graph=data, node=node)
+
+            if node_mask is None:
+                node_mask = cur_node_mask
+                edge_mask = cur_edge_mask
+            else:
+                node_mask = node_mask & cur_node_mask
+                edge_mask = edge_mask & cur_edge_mask
+
+        if node_mask is None:
+            print("ACHTUNG")
+            return data
+
+        return apply_mask(graph=data, node_mask=node_mask, edge_mask=edge_mask)
+
+
+class MaskNodeskConfig(BaseTransformConfig):
+    type: Literal["mask_node"] = "mask_node"
+    node2mask: list[str]
+    mask_callee: bool = True
+
+    def create(self) -> MaskNodes:
+        return MaskNodes(self.node2mask, mask_callee=self.mask_callee)
+
+
+Transform = MaskNodeskConfig | EmbedTransformConfig | ToHetero | ToPYG

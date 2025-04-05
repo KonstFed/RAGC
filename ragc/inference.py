@@ -21,7 +21,6 @@ class Inference:
         query: str,
         ignore_nodes: list[str] | None = None,
     ):
-        # TODO: надо придумать механизм умного ретриавала (сколько возращать? Пока просто 5 элементов)
         relevant_nodes = self.retrieval.retrieve(query=query, n_elems=self.n_elems, ignore_nodes=ignore_nodes)
         return self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
 

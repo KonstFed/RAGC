@@ -13,14 +13,10 @@ def build_prompt(
         namespace: str,
         signature: str,
         requirement: Dict[str, str],
-        domain: str,
         completion_type: Literal['function', 'method']
 ) -> str:
     requirement_str = ''.join(f"## {key}\n{value}" for key, value in requirement.items())
     prompt = f"""Your task is to generate a Python {completion_type} based on the following details:
-
-# Domain
-Task domain is related to **{domain}**
 
 # Completion path
 `{completion_path}`
@@ -34,10 +30,10 @@ Task domain is related to **{domain}**
 # {completion_type.title()} signature
 ```
 {signature}
-
+```
 # Answer format
 It is very important, that your answer should only include a {completion_type} body without additional text and explanations of any kind.
-```"""
+"""
     
     return prompt
 
@@ -60,7 +56,6 @@ def generate(
         namespace=task['namespace'],
         signature=extract_signature(task_path, task['signature_position']),
         requirement=task['requirement'],
-        domain=task['domain'],
         completion_type=task['type']
     )
 
