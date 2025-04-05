@@ -123,7 +123,7 @@ class EdgeTypeNumeric(Enum):
 
 
 class Node(BaseModel):
-    name: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+$")]
+    name: Annotated[str, Field(pattern=r"^[@A-Za-z0-9._-]+$")]
     type: NodeType
     docstring: str
     signature: str
