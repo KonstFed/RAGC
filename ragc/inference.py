@@ -25,10 +25,13 @@ class Inference:
     def __call__(
         self,
         query: str,
-    ):
+    ) -> tuple[str, dict]:
         query_emb = self.query_embedder.embed([query])[0]
         relevant_nodes = self.retrieval.retrieve(query=query_emb)
-        return self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
+        result = self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
+        answer = result.pop("answer")
+        result["retrieved_context"] = relevant_nodes
+        return answer, result
 
 
 class InferenceConfig(BaseModel):

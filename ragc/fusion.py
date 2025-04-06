@@ -10,7 +10,7 @@ from ragc.prompt import PromptConfig, PromptTemplate
 
 class BaseFusion(ABC):
     @abstractmethod
-    def fuse_and_generate(self, query: str, relevant_nodes: list[Node]) -> str:
+    def fuse_and_generate(self, query: str, relevant_nodes: list[Node]) -> dict[str, str]:
         """Fuse relevant nodes into generator and produce answer to query."""
 
 
@@ -22,8 +22,11 @@ class PromptFusion(BaseFusion):
     def fuse_and_generate(self, query: str, relevant_nodes: list[Node]) -> str:
         """Fuse relevant node via simple prompt injection."""
         prompt = self.prompt_template.inject(query=query, context=relevant_nodes)
-        return self.generator.generate(prompt=prompt)
-
+        answer = self.generator.generate(prompt=prompt), prompt
+        return {
+            "answer": answer,
+            "prompt": prompt,
+        }
 
 class BaseFusionConfig(ABC, BaseModel):
     model_config = ConfigDict(

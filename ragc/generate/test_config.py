@@ -10,7 +10,7 @@ class TestInference:
         self.dataset = dataset
         self.inference_cfg = inference_cfg
 
-    def __call__(self, repo_name: str, prompt: str, node_namespace: str) -> str:
+    def __call__(self, repo_name: str, prompt: str, node_namespace: str) -> tuple[str, dict]:
         graph = self.dataset.get_by_name(repo_name)
         if graph is None:
             raise ValueError(f"repo {repo_name} is not present in dataset")
