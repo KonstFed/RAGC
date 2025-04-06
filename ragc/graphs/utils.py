@@ -147,7 +147,6 @@ def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) ->
 def pyg_extract_node(graph: Data, indices: list[int]) -> list[Node]:
     """Extract Node representation from PYG graph located with indices."""
     nodes = []
-    print(graph)
     for idx in indices:
         n = Node(
             name=graph.name[idx],

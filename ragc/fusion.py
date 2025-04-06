@@ -22,7 +22,7 @@ class PromptFusion(BaseFusion):
     def fuse_and_generate(self, query: str, relevant_nodes: list[Node]) -> str:
         """Fuse relevant node via simple prompt injection."""
         prompt = self.prompt_template.inject(query=query, context=relevant_nodes)
-        answer = self.generator.generate(prompt=prompt), prompt
+        answer = self.generator.generate(prompt=prompt)
         return {
             "answer": answer,
             "prompt": prompt,
