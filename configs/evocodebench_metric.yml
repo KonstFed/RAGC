@@ -7,7 +7,7 @@ inference:
     model_name: microsoft/unixcoder-base
     max_batch_size: 256
     max_length: 1024
-    store_in_gpu: true
+    store_in_gpu: false
   retrieval:
     type: pcst
     n_subgraphs: 1
@@ -18,11 +18,11 @@ inference:
       prompt_template_p: ../prompts/prompt.txt
       context_prompt_template_p: ../prompts/context.txt
     generator:
-      ollama_url: localhost:11434
+      ollama_url: http://localhost:11434
       model: codellama:34b
   n_elems: 5
 dataset:
-  root_path: /Users/konstfed/Documents/diplom/RAGC/data/torch_cache/evocodebench
+  root_path: /home/jovyan/work/diplom/RAGC/data/torch_cache/evocodebench
   repos_path: null
   graphs_path: null
   parser: null
