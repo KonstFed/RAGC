@@ -37,7 +37,7 @@ It is very important, that your answer should only include a {completion_type} b
     return prompt
 
 
-def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> str:
+def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> dict:
     file_path = Path(completion_path).relative_to(project_path)
 
     parts = list(file_path.parts)
@@ -98,4 +98,9 @@ def generate(task: Dict[str, Any], repos_dir: str | os.PathLike, test_inference:
         node_namespace=namespace,
     )
 
-    return generation
+    result = {
+        "namespace": task["namespace"],
+        "completion": generation,
+    }
+
+    return result

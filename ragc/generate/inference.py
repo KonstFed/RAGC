@@ -1,8 +1,11 @@
 import argparse
+import json
 import os
 from pathlib import Path
 from pprint import pprint
 from typing import Any, Dict, Literal, Mapping
+
+from tqdm import tqdm
 
 from ragc.generate.baseline_inference import generate as baseline_generate
 from ragc.generate.rag_inference import generate as rag_generate
@@ -73,12 +76,17 @@ def generate_completions(
     test_inference_cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
     test_inference = test_inference_cfg.create()
 
-    for task in tasks:
+    f = open(output_path, "w")
+    f.close()
+
+    for task in tqdm(tasks):
         if Path(task["project_path"]).name not in test_inference.dataset.get_repos_names():
             # repository is not present in dataset
             continue
         generation =_generate_func(task, repos_dir, test_inference = test_inference, config_path=config_path)
-        print(generation)
+        with open(output_path, "a") as f:
+            json_line = json.dumps(generation)
+            f.write(json_line + "\n")
 
 
 if __name__ == '__main__':
