@@ -15,14 +15,14 @@ inference:
   fusion:
     type: prompt
     prompt:
-      prompt_template_p: ../prompts/prompt.txt
-      context_prompt_template_p: ../prompts/context.txt
+      prompt_template_p: prompts/prompt.txt
+      context_prompt_template_p: prompts/context.txt
     generator:
       ollama_url: http://localhost:11434
       model: codellama:34b
   n_elems: 5
 dataset:
-  root_path: /home/jovyan/work/diplom/RAGC/data/torch_cache/evocodebench
+  root_path: data/torch_cache/evocodebench
   repos_path: null
   graphs_path: null
   parser: null

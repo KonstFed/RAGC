@@ -1,11 +1,10 @@
 import os
-
-from typing import Dict, Literal, Any
 from pathlib import Path
+from typing import Any, Dict, Literal
 
 from ragc.generate.utils import extract_signature
-from ragc.utils import load_config
-from .test_config import TestInference, TestInferenceConfig
+
+from .test_config import TestInference
 
 
 def build_prompt(
@@ -38,12 +37,47 @@ It is very important, that your answer should only include a {completion_type} b
     return prompt
 
 
-def generate(task: Dict[str, Any], repos_dir: str | os.PathLike, **kwargs) -> str:
+def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> str:
+    file_path = Path(completion_path).relative_to(project_path)
+
+    parts = list(file_path.parts)
+    # remove python file
+    parts[-1] = parts[-1].removesuffix(".py")
+    if file_path.name == "__init__.py":
+        parts = parts[:-1]
+
+    namespace_parts = namespace.split(".")
+    match_idx = 0
+    for i in range(len(parts)):
+        if parts[i] != namespace_parts[0]:
+            continue
+
+        is_match = True
+
+        for j in range(i, len(parts)):
+            if parts[j] != namespace_parts[j - i]:
+                is_match = False
+                break
+
+        if is_match:
+            match_idx = i
+            break
+
+    namespace = ".".join(parts[:match_idx] + namespace.split("."))
+
+    if file_path.name == "__init__.py":
+        _parts = list(file_path.parts)
+        _parts[-1] = _parts[-1].removesuffix(".py")
+        namespace = namespace.replace(".".join(file_path.parts[:-1]), ".".join(_parts))
+
+    return namespace
+
+
+def generate(task: Dict[str, Any], repos_dir: str | os.PathLike, test_inference: TestInference, **kwargs) -> str:
     config_path = kwargs.get("config_path", None)
     if not config_path:
         raise ValueError("No RAG config is specified!")
 
-    repo_path = os.path.join(repos_dir, task["completion_path"].split("/")[0])
     task_path = os.path.join(repos_dir, task["completion_path"])
 
     # build prompt
@@ -55,14 +89,13 @@ def generate(task: Dict[str, Any], repos_dir: str | os.PathLike, **kwargs) -> st
         completion_type=task["type"],
     )
 
+    namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
+
     # inference
-    cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
-    inference: TestInference = cfg.create()
-    inference(
+    generation, _meta = test_inference(
         repo_name=Path(task["project_path"]).parts[-1],
         prompt=prompt,
-        node_namespace=".".join(task["namespace"].split(".")[1:]),
+        node_namespace=namespace,
     )
-    generation = inference(prompt)
 
     return generation

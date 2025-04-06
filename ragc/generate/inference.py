@@ -1,17 +1,19 @@
 import argparse
 import os
-
+from pathlib import Path
 from pprint import pprint
-from typing import Mapping, Dict, Literal, Any
+from typing import Any, Dict, Literal, Mapping
 
-from ragc.generate.utils import load_tasks
 from ragc.generate.baseline_inference import generate as baseline_generate
 from ragc.generate.rag_inference import generate as rag_generate
+from ragc.generate.test_config import TestInferenceConfig
+from ragc.generate.utils import load_tasks
+from ragc.utils import load_config
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument(
         '-t', '--tasks',
         type=str,
@@ -68,8 +70,14 @@ def generate_completions(
         case default:
             raise ValueError("generate_func shoulde be amongst ['baseline', 'rag']")
 
+    test_inference_cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
+    test_inference = test_inference_cfg.create()
+
     for task in tasks:
-        generation = _generate_func(task, repos_dir, config_path=config_path)
+        if Path(task["project_path"]).name not in test_inference.dataset.get_repos_names():
+            # repository is not present in dataset
+            continue
+        generation =_generate_func(task, repos_dir, test_inference = test_inference, config_path=config_path)
         print(generation)
 
 

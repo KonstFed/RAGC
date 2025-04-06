@@ -2,12 +2,4 @@ You are an expert programming assistant. Your task is to help me with the follow
 
 {context}
 
-**Question/Task**: {query}
-
-
-Provide the following in your response:
-- A clear explanation of your solution or answer.
-- The modified or generated code (if applicable).
-- Any additional notes or best practices related to the task.
-
-Let’s get started!
+{query}
