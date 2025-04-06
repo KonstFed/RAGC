@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 import torch
-from torch_geometric.data import Data
-import networkx as nx
 from pydantic import BaseModel, ConfigDict
+from torch_geometric.data import Data
 
 from ragc.graphs.common import Node
 
@@ -15,11 +14,14 @@ class BaseRetrieval(ABC):
     def __init__(self, graph: Data) -> None:
         self.graph = graph
 
+    @abstractmethod
+    def _retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+        """Get relevant nodes as indexes."""
+        raise NotImplementedError
 
     @abstractmethod
-    def retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
-        """Получить релевантные куски кода."""
-        raise NotImplementedError
+    def retrieve(self, query: str | torch.Tensor) -> list[Node]:
+        """Get relevant nodes as Node."""
 
 
 class BaseCachedRetrieval(BaseRetrieval):

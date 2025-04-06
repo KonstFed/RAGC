@@ -1,5 +1,7 @@
-from transformers import AutoTokenizer, AutoModel
+from typing import Literal
+
 import torch
+from transformers import AutoModel, AutoTokenizer
 
 from ragc.llm.embedding import BaseEmbedder, BaseEmbederConfig
 
@@ -56,6 +58,8 @@ class HuggingFaceEmbedder(BaseEmbedder):
 
 
 class HuggingFaceEmbedderConfig(BaseEmbederConfig):
+    type: Literal["hugging_face"] = "hugging_face"
+
     model_name: str
     max_batch_size: int
     max_length: int | None = None

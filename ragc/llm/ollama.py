@@ -42,7 +42,7 @@ class OllamaGenerator(BaseGenerator):
 
 
 class OllamaGeneratorConfig(BaseGeneratorConfig):
-    ollama_url: HttpUrl
+    ollama_url: HttpUrl = "localhost:11434"
     model: str
 
     def create(self) -> OllamaGenerator:

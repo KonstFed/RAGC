@@ -178,7 +178,7 @@ class MaskNodes(BaseTransform):
         return apply_mask(graph=data, node_mask=node_mask, edge_mask=edge_mask)
 
 
-class MaskNodeskConfig(BaseTransformConfig):
+class MaskNodesConfig(BaseTransformConfig):
     type: Literal["mask_node"] = "mask_node"
     node2mask: list[str]
     mask_callee: bool = True
@@ -187,4 +187,4 @@ class MaskNodeskConfig(BaseTransformConfig):
         return MaskNodes(self.node2mask, mask_callee=self.mask_callee)
 
 
-Transform = MaskNodeskConfig | EmbedTransformConfig | ToHetero | ToPYG
+Transform = MaskNodesConfig | EmbedTransformConfig | ToHetero | ToPYG

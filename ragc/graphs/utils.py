@@ -5,7 +5,7 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import from_networkx
 
-from ragc.graphs.common import EdgeType, EdgeTypeNumeric, NodeType, NodeTypeNumeric
+from ragc.graphs.common import EdgeType, EdgeTypeNumeric, NodeType, NodeTypeNumeric, Node
 
 nodetype2idx = {
     NodeType.FUNCTION: NodeTypeNumeric.FUNCTION.value,
@@ -14,6 +14,12 @@ nodetype2idx = {
     NodeType.FUNCTION.value: NodeTypeNumeric.FUNCTION.value,
     NodeType.CLASS.value: NodeTypeNumeric.CLASS.value,
     NodeType.FILE.value: NodeTypeNumeric.FILE.value,
+}
+
+idx2nodetype = {
+    NodeTypeNumeric.FUNCTION.value: NodeType.FUNCTION,
+    NodeTypeNumeric.CLASS.value: NodeType.CLASS,
+    NodeTypeNumeric.FILE.value: NodeType.FILE,
 }
 
 edgetype2idx = {
@@ -129,8 +135,27 @@ def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) ->
         x=graph.x[node_mask],
         edge_index=idx_map[graph.edge_index[:, edge_mask]],
         name=[graph.name[i] for i in kept_nodes] if graph.name else None,
+        docstring=[graph.docstring[i] for i in kept_nodes] if graph.name else None,
+        signature=[graph.signature[i] for i in kept_nodes] if graph.name else None,
         type=graph.type[node_mask] if graph.type is not None else None,
         code=[graph.code[i] for i in kept_nodes] if graph.code else None,
         file_path=[graph.file_path[i] for i in kept_nodes] if graph.file_path else None,
         edge_type=graph.edge_type[edge_mask] if graph.edge_type is not None else None,
     )
+
+
+def pyg_extract_node(graph: Data, indices: list[int]) -> list[Node]:
+    """Extract Node representation from PYG graph located with indices."""
+    nodes = []
+    print(graph)
+    for idx in indices:
+        n = Node(
+            name=graph.name[idx],
+            type=idx2nodetype[int(graph.type[idx])],
+            docstring=graph.docstring[idx],
+            signature=graph.signature[idx],
+            code=graph.code[idx],
+            file_path=graph.file_path[idx],
+        )
+        nodes.append(n)
+    return nodes

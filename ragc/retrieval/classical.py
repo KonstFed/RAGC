@@ -5,8 +5,9 @@ import torch.nn.functional as F
 from pcst_fast import pcst_fast
 from torch_geometric.data import Data
 
-from ragc.graphs.common import NodeTypeNumeric
+from ragc.graphs.common import NodeTypeNumeric, Node
 from ragc.retrieval.common import BaseRetievalConfig, BaseRetrieval
+from ragc.graphs.utils import pyg_extract_node
 
 
 class SimpleEmbRetrieval(BaseRetrieval):
@@ -27,7 +28,7 @@ class SimpleEmbRetrieval(BaseRetrieval):
         self.embeddings = self.graph.x[not_file_mask]
         self.embeddings = F.normalize(self.embeddings, p=2, dim=1)
 
-    def retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+    def _retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
         if isinstance(query, str):
             raise ValueError("пока не сделали для строк")
 
@@ -36,6 +37,10 @@ class SimpleEmbRetrieval(BaseRetrieval):
         cosine_dist = torch.abs(cosine_dist)
         _, indices = torch.topk(cosine_dist, k=min(self.ntop, len(cosine_dist)))
         return self.ind2node[indices]
+
+    def retrieve(self, query: str | torch.Tensor) -> list[Node]:
+        indices = self._retrieve(query=query)
+        return pyg_extract_node(graph=self.graph, indices=indices.tolist())
 
 
 class SimpleEmbRetrievalConfig(BaseRetievalConfig):
@@ -97,12 +102,16 @@ class PCSTRetrieval(BaseRetrieval):
         self.ntop = ntop
         super().__init__(graph)
 
-    def retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+    def _retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
         if isinstance(query, str):
             raise ValueError("пока не сделали для строк")
 
         vertices, _ = pcst(graph=self.graph, query_emb=query, k=self.ntop, n_subgraphs=self.n_subgraphs)
         return vertices
+
+    def retrieve(self, query: str | torch.Tensor) -> list[Node]:
+        indices = self._retrieve(query=query)
+        return pyg_extract_node(graph=self.graph, indices=indices.tolist())
 
 
 class PCSTConfig(BaseRetievalConfig):
