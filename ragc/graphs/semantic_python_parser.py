@@ -15,7 +15,7 @@ from ragc.graphs.common import (
     Node,
     NodeType,
 )
-from ragc.graphs.ast_tools import extract_function_info, extract_class_info
+from ragc.graphs.ast_tools import extract_function_info, extract_class_info, to_zero_ident
 
 COLOR2CLASS: dict[str, str] = {
     "green": "file",
@@ -113,12 +113,7 @@ class SemanticParser(BaseGraphParser):
             code = attr["body"]
             ident_pos = attr["start_point"][1]
             code = " " * ident_pos + code
-            lines = code.splitlines()
-            if len(lines) == 0:
-                continue
-            min_indent = min((len(line) - len(line.lstrip())) for line in lines)
-            stripped_lines = [line[min_indent:] if line.strip() else line for line in lines]
-            code = "\n".join(stripped_lines)
+            code = to_zero_ident(code)
 
             try:
                 formatted_code = black.format_str(code, mode=black.Mode())
