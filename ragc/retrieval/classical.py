@@ -5,9 +5,9 @@ import torch.nn.functional as F
 from pcst_fast import pcst_fast
 from torch_geometric.data import Data
 
-from ragc.graphs.common import NodeTypeNumeric, Node
+from ragc.graphs.common import Node, NodeTypeNumeric, EdgeTypeNumeric
+from ragc.graphs.utils import pyg_extract_node, apply_mask, mask_nodes
 from ragc.retrieval.common import BaseRetievalConfig, BaseRetrieval
-from ragc.graphs.utils import pyg_extract_node
 
 
 class SimpleEmbRetrieval(BaseRetrieval):
@@ -97,21 +97,44 @@ def pcst(
 
 
 class PCSTRetrieval(BaseRetrieval):
-    def __init__(self, graph: Data, n_subgraphs: int, ntop: int):
+    def __init__(self, graph: Data, n_subgraphs: int, ntop: int, for_prompt: bool = False):
         self.n_subgraphs = n_subgraphs
         self.ntop = ntop
+        self.for_prompt = for_prompt
         super().__init__(graph)
 
-    def _retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+    def _retrieve(self, query: str | torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if isinstance(query, str):
             raise ValueError("пока не сделали для строк")
 
-        vertices, _ = pcst(graph=self.graph, query_emb=query, k=self.ntop, n_subgraphs=self.n_subgraphs)
-        return vertices
+        vertices, edges = pcst(graph=self.graph, query_emb=query, k=self.ntop, n_subgraphs=self.n_subgraphs)
+        return vertices, edges
 
     def retrieve(self, query: str | torch.Tensor) -> list[Node]:
-        indices = self._retrieve(query=query)
-        return pyg_extract_node(graph=self.graph, indices=indices.tolist())
+        vertices, edges = self._retrieve(query=query)
+        if not self.for_prompt:
+            return pyg_extract_node(graph=self.graph, indices=vertices.tolist())
+
+        # perform removing to reduce context size
+        # task PCST result from graph
+        node_mask = torch.zeros(self.graph.num_nodes, dtype=torch.bool)
+        node_mask[vertices] = True
+        edge_mask = torch.zeros(self.graph.num_edges, dtype=torch.bool)
+        edge_mask[edges] = True
+        masked_graph = apply_mask(self.graph, node_mask, edge_mask)
+
+        # Remove files
+        file_nodes = torch.where(masked_graph.type == NodeTypeNumeric.FILE.value)[0]
+        _node_msk, _edge_msk = mask_nodes(masked_graph, nodes=file_nodes)
+        masked_graph = apply_mask(masked_graph, _node_msk, _edge_msk)
+
+        # Remove nodes whose code is already included into some other node code
+        own_edges = masked_graph.edge_index[:, masked_graph.edge_type == EdgeTypeNumeric.OWNER.value]
+        nodes_with_owner = own_edges[1, :]
+        _node_msk, _edge_msk = mask_nodes(masked_graph, nodes_with_owner)
+        final_graph = apply_mask(masked_graph, _node_msk, _edge_msk)
+
+        return pyg_extract_node(graph=final_graph)
 
 
 class PCSTConfig(BaseRetievalConfig):
@@ -120,5 +143,12 @@ class PCSTConfig(BaseRetievalConfig):
     n_subgraphs: int = 1
     ntop: int
 
+    for_prompt: bool = False
+
     def create(self, graph: Data) -> "PCSTRetrieval":
-        return PCSTRetrieval(graph=graph, n_subgraphs=self.n_subgraphs, ntop=self.ntop)
+        return PCSTRetrieval(
+            graph=graph,
+            n_subgraphs=self.n_subgraphs,
+            ntop=self.ntop,
+            for_prompt=self.for_prompt,
+        )

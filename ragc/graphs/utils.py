@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Iterable
 
 import networkx as nx
 import torch
@@ -100,6 +101,16 @@ def mask_node(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
     return node_mask, edge_mask
 
 
+def mask_nodes(graph: Data, nodes: Iterable[int] | torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    node_mask = torch.ones(graph.num_nodes, dtype=torch.bool)
+    edge_mask = torch.ones(graph.num_edges, dtype=torch.bool)
+    for node in nodes:
+        c_node_mask, c_edge_mask = mask_node(graph, node)
+        node_mask = node_mask & c_node_mask
+        edge_mask = edge_mask & c_edge_mask
+    return node_mask, edge_mask
+
+
 def get_callee_mask(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Get mask for graph excluding node and its callee subgraph.
 
@@ -122,7 +133,9 @@ def get_callee_mask(graph: Data, node: int) -> tuple[torch.Tensor, torch.Tensor]
     return node_mask, edge_mask
 
 
-def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) -> Data:
+def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor | None = None) -> Data:
+    if edge_mask is None:
+        edge_mask = torch.ones(graph.num_edges, dtype=torch.bool)
     # Get indices of kept nodes
     kept_nodes = torch.where(node_mask)[0]
 
@@ -144,8 +157,10 @@ def apply_mask(graph: Data, node_mask: torch.Tensor, edge_mask: torch.Tensor) ->
     )
 
 
-def pyg_extract_node(graph: Data, indices: list[int]) -> list[Node]:
+def pyg_extract_node(graph: Data, indices: list[int] | None = None) -> list[Node]:
     """Extract Node representation from PYG graph located with indices."""
+    if indices is None:
+        indices = list(range(graph.num_nodes))
     nodes = []
     for idx in indices:
         n = Node(
