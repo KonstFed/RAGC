@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Literal
 from pathlib import Path
 
 import torch
@@ -84,3 +85,18 @@ class BaseRetievalConfig(BaseModel):
         frozen=True,
         arbitrary_types_allowed=True,
     )
+
+
+class NoRetrievalConfig(BaseRetievalConfig, BaseRetrieval):
+    """Config for no retrieval."""
+
+    type: Literal["no_retrieval"] = "no_retrieval"
+
+    def _retrieve(self, query: str | torch.Tensor) -> torch.Tensor:
+        return None
+
+    def retrieve(self, query: str | torch.Tensor) -> list[Node]:
+        return []
+
+    def create(self, graph: Data):
+        return self
