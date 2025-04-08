@@ -1,3 +1,4 @@
-from ragc.retrieval.classical import SimpleEmbRetrievalConfig, PCSTConfig
+from ragc.retrieval.classical import PCSTConfig, SimpleEmbRetrievalConfig
+from ragc.retrieval.common import NoRetrievalConfig
 
-RetrievalConfig = SimpleEmbRetrievalConfig | PCSTConfig
+RetrievalConfig = SimpleEmbRetrievalConfig | PCSTConfig | NoRetrievalConfig
