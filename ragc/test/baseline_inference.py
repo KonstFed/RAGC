@@ -2,7 +2,7 @@ import os
 
 from typing import Dict, Literal, Any
 
-from ragc.generate.utils import extract_signature
+from ragc.test.utils import extract_signature
 
 
 def build_prompt(

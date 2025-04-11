@@ -1,0 +1,28 @@
+inference:
+  parser:
+    cache_path: null
+    type: python_parser
+  query_embedder:
+    type: hugging_face
+    model_name: microsoft/unixcoder-base
+    max_batch_size: 256
+    max_length: 1024
+    store_in_gpu: false
+  retrieval:
+    type: no_retrieval
+  fusion:
+    type: prompt
+    prompt:
+      prompt_template_p: prompts/prompt.txt
+      context_prompt_template_p: prompts/context.txt
+    generator:
+      ollama_url: http://localhost:11434
+      model: deepseek-coder:33b
+  n_elems: 5
+dataset:
+  root_path: data/torch_cache/evocodebench
+  repos_path: null
+  graphs_path: null
+  parser: null
+  pre_transform: null
+  transform: null

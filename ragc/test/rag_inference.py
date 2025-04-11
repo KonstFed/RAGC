@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Literal
 
-from ragc.generate.utils import extract_signature
+from ragc.test.utils import extract_signature
 
 from .test_config import TestInference
 

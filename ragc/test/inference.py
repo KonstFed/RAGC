@@ -7,10 +7,10 @@ from typing import Any, Dict, Literal, Mapping
 
 from tqdm import tqdm
 
-from ragc.generate.baseline_inference import generate as baseline_generate
-from ragc.generate.rag_inference import generate as rag_generate
-from ragc.generate.test_config import TestInferenceConfig
-from ragc.generate.utils import load_tasks
+from ragc.test.baseline_inference import generate as baseline_generate
+from ragc.test.rag_inference import generate as rag_generate
+from ragc.test.test_config import TestInferenceConfig
+from ragc.test.utils import load_tasks
 from ragc.utils import load_config
 
 
