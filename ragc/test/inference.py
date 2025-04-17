@@ -18,33 +18,24 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-t', '--tasks',
+        "-t",
+        "--task",
         type=str,
         required=True,
-        help='Path to a file with tasks in EvoCodeBench format',
+        help='Either "retrieval" or "completion"',
     )
     parser.add_argument(
-        '-r', '--repos',
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        help="Path to an output file with completions",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
         type=str,
         required=True,
-        help='Path to a directory with all repositories. Must be an absolute path.',
-    )
-    parser.add_argument(
-        '-o', '--output',
-        type=str,
-        required=True,
-        help='Path to an output file with completions',
-    )
-    parser.add_argument(
-        '--generate-func',
-        type=str,
-        choices=['baseline', 'rag'],
-        default='rag',
-        help="Generation function to be used. Available options: 'baseline' and 'rag'",
-    )
-    parser.add_argument(
-        '-c', '--config',
-        type=str,
         help="Path to .yaml config for inference",
     )
 
@@ -52,60 +43,73 @@ def parse_args():
 
 
 def generate_completions(
-        tasks: Mapping[str, Dict[str, Any]],
-        repos_dir: str | os.PathLike,
-        output_path: str | os.PathLike,
-        generate_func: Literal['baseline', 'rag'],
-        config_path: str | os.PathLike = None,
+    output_path: str | Path,
+    config_path: str | Path,
 ):
-    # make paths absolute if they are not already
-    if not os.path.isabs(repos_dir):
-        repos_dir = os.path.abspath(repos_dir)
-    if not os.path.isabs(output_path):
-        output_path = os.path.abspath(output_path)
-
-    # select generation method
-    match generate_func:
-        case 'baseline':
-            _generate_func = baseline_generate
-        case 'rag':
-            _generate_func = rag_generate
-        case default:
-            raise ValueError("generate_func shoulde be amongst ['baseline', 'rag']")
-
+    output_path = Path(output_path).absolute().resolve()
     test_inference_cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
     test_inference = test_inference_cfg.create()
+    print(f"Loaded {len(test_inference.tasks)} tasks")
+    print("-" * 256)
 
     f = open(output_path, "w")
     f.close()
 
-    for task in tqdm(tasks):
-        if Path(task["project_path"]).name not in test_inference.dataset.get_repos_names():
-            # repository is not present in dataset
-            continue
-        generation =_generate_func(task, repos_dir, test_inference = test_inference, config_path=config_path)
+    for result in test_inference.generate_completion():
+        # change if we have multiple pass@k > 1
+        result["idx"] = 0
         with open(output_path, "a") as f:
-            json_line = json.dumps(generation)
+            json_line = json.dumps(result)
             f.write(json_line + "\n")
 
 
-if __name__ == '__main__':
+def retrieval_metrics(
+    output_path: str | Path,
+    config_path: str | Path,
+):
+    output_path = Path(output_path).absolute().resolve()
+    test_inference_cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
+    test_inference = test_inference_cfg.create()
+    print(f"Loaded {len(test_inference.tasks)} tasks")
+    print("-" * 256)
+
+    recalls = []
+    precision = []
+    for gold, gotten in test_inference.generate_retrieval_pairs():
+        gold_names = set(g.name for g in gold)
+        real = set(r.name for r in gotten)
+        hit = gold_names.intersection(real)
+        recalls.append(len(hit) / len(gold))
+        precision.append(len(hit) / len(gotten))
+
+    result = {
+        "avg. recall": sum(recalls) / len(recalls),
+        "avg. precision": sum(precision) / len(precision),
+    }
+
+    with open(output_path, "w") as f:
+        json.dump(result, f)
+
+
+if __name__ == "__main__":
     # parse args
     args = parse_args()
-    print('args:')
+    print("args:")
     pprint(args.__dict__)
-    print('-' * 256)
+    print("-" * 256)
 
-    # load tasks
-    print(f'Loading tasks from {args.tasks}...')
-    tasks = load_tasks(args.tasks)
-    print(f'Loaded {len(tasks)} tasks.')
 
     # run generation
-    generate_completions(
-        tasks,
-        args.repos,
-        args.output,
-        generate_func=args.generate_func,
-        config_path=args.config,
-    )
+
+    match args.task:
+        case "completion":
+            generate_completions(
+                args.output,
+                config_path=args.config,
+            )
+        case "retrieval":
+            retrieval_metrics(
+                args.output,
+                config_path=args.config,
+            )
+

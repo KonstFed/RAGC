@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from typing import Iterator, Literal
 
@@ -95,15 +96,32 @@ class TestInference:
         self.repos_path = repos_path
         self.task_path = task_path
         self.only_with_cross_file = only_with_cross_file
-        _task = pd.read_json(task_path, lines=True)
-        _task["cross_file"] = _task["dependency"].apply(lambda x: x["cross_file"])
-        self.tasks = _task[_task["cross_file"].apply(len) > 0]
 
-    def _prepare_graph(self, repo_name: str, node_namespace: str) -> Data | None:
+        _task = pd.read_json(task_path, lines=True)
+        _task = _task[_task["project_path"].apply(lambda x: x.split("/")[-1]).isin(dataset.get_repos_names())]
+
+        if only_with_cross_file:
+            _task = self._clean_dependecies(_task)
+
+        self.tasks = _task
+
+    def _clean_dependecies(self, tasks: pd.DataFrame) -> pd.DataFrame:
+        def _present_in_graph(task) -> bool:
+            repo_name = Path(task["project_path"]).parts[-1]
+            namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
+
+            graph = self._prepare_graph(repo_name=repo_name, node_namespace=namespace)
+
+            gold_nodes = self._get_gold_snippets(task_row=task, graph=graph)
+            return gold_nodes is not None
+
+        tasks["cross_file"] = tasks["dependency"].apply(lambda x: x["cross_file"])
+        tasks = tasks[tasks["cross_file"].apply(len) > 0]
+        return tasks[tasks.apply(_present_in_graph, axis=1)]
+
+    def _prepare_graph(self, repo_name: str, node_namespace: str) -> Data:
         """Get graph from node_namespace."""
         graph = self.dataset.get_by_name(repo_name)
-        if graph is None:
-            return None
         t = MaskNodes([node_namespace], mask_callee=True)
         graph = t(graph)
         return graph
@@ -115,9 +133,9 @@ class TestInference:
 
     def generate_completion(self, progress_bar: bool = True) -> Iterator[dict[str, str]]:
         """Pipeline for evocodebench generation."""
-        bar = tqdm(self.tasks.iterrows()) if progress_bar else self.tasks.iterrows()
+        bar = tqdm(self.tasks.iterrows(), total=len(self.tasks)) if progress_bar else self.tasks.iterrows()
         for _, task in bar:
-            task_path = self.repos_path / task["project_path"]
+            task_path = self.repos_path / task["completion_path"]
             namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
             prompt = build_prompt(
                 completion_path=task["completion_path"],
@@ -164,13 +182,11 @@ class TestInference:
             namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
 
             graph = self._prepare_graph(repo_name=repo_name, node_namespace=namespace)
-            if graph is None:
-                # repo is not parsed
-                continue
 
             gold_nodes = self._get_gold_snippets(task_row=task, graph=graph)
             if gold_nodes is None:
                 # gold dependencies are not in our graph
+                warnings.warn(f"{task['namespace']} got cross file reference not found in graph.")
                 continue
 
             prompt = build_prompt(
