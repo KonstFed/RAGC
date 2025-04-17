@@ -17,7 +17,7 @@ inference:
       prompt_template_p: prompts/prompt.txt
       context_prompt_template_p: prompts/context.txt
     generator:
-      ollama_url: http://localhost:11434
+      ollama_url: http://localhost:11434/
       model: codellama:7b
   n_elems: 5
 dataset:
@@ -27,3 +27,6 @@ dataset:
   parser: null
   pre_transform: null
   transform: null
+task_path: data/evocodebench/tasks_only_cross.jsonl
+repos_path: data/evocodebench/repos/Source_Code
+only_with_cross_file: true

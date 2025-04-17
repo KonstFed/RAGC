@@ -1,16 +1,9 @@
 import argparse
 import json
-import os
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Dict, Literal, Mapping
 
-from tqdm import tqdm
-
-from ragc.test.baseline_inference import generate as baseline_generate
-from ragc.test.rag_inference import generate as rag_generate
 from ragc.test.test_config import TestInferenceConfig
-from ragc.test.utils import load_tasks
 from ragc.utils import load_config
 
 
@@ -96,7 +89,7 @@ if __name__ == "__main__":
     args = parse_args()
     print("args:")
     pprint(args.__dict__)
-    print("-" * 256)
+    pprint("-" * 256)
 
 
     # run generation
