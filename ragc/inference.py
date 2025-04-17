@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from torch_geometric.data import Data
 
 from ragc.fusion import BaseFusion, FusionConfig
-from ragc.graphs import GraphParserConfig
+from ragc.graphs import GraphParserConfig, Node
 from ragc.llm.types import EmbedderConfig
 from ragc.llm.embedding import BaseEmbedder
 from ragc.retrieval import RetrievalConfig
@@ -26,12 +26,17 @@ class Inference:
         self,
         query: str,
     ) -> tuple[str, dict]:
-        query_emb = self.query_embedder.embed([query])[0]
-        relevant_nodes = self.retrieval.retrieve(query=query_emb)
+        relevant_nodes = self.retrieve(query)
         result = self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
         answer = result.pop("answer")
         result["retrieved_context"] = relevant_nodes
         return answer, result
+
+    def retrieve(self, query: str) -> list[Node]:
+        """Make only retrieval."""
+        query_emb = self.query_embedder.embed([query])[0]
+        relevant_nodes = self.retrieval.retrieve(query=query_emb)
+        return relevant_nodes
 
 
 class InferenceConfig(BaseModel):
