@@ -87,8 +87,9 @@ class TestInference:
         dataset: TorchGraphDataset,
         inference_cfg: InferenceConfig,
         task_path: Path,
-        only_with_cross_file: bool,
         repos_path: Path,
+        only_with_cross_file: bool = True,
+        use_gold_context: bool = False,
     ):
         self.dataset = dataset
         self.inference_cfg = inference_cfg
@@ -96,6 +97,7 @@ class TestInference:
         self.repos_path = repos_path
         self.task_path = task_path
         self.only_with_cross_file = only_with_cross_file
+        self.use_gold_context = use_gold_context
 
         _task = pd.read_json(task_path, lines=True)
         _task = _task[_task["project_path"].apply(lambda x: x.split("/")[-1]).isin(dataset.get_repos_names())]
@@ -126,10 +128,22 @@ class TestInference:
         graph = t(graph)
         return graph
 
+    def retrieve(self, repo_name: str, prompt: str, node_namespace: str) -> list[Node]:
+        graph = self._prepare_graph(repo_name, node_namespace)
+        inference = self.inference_cfg.create(graph=graph)
+        return inference.retrieve(prompt)
+
     def __call__(self, repo_name: str, prompt: str, node_namespace: str) -> tuple[str, dict]:
         graph = self._prepare_graph(repo_name, node_namespace)
         inference = self.inference_cfg.create(graph=graph)
         return inference(query=prompt)
+
+    def _generate_with_golden(
+        self, repo_name: str, prompt: str, node_namespace: str, golden_nodes: list[Node]
+    ) -> tuple[str, dict]:
+        graph = self._prepare_graph(repo_name, node_namespace)
+        inference = self.inference_cfg.create(graph=graph)
+        return inference.generate_with_context(query=prompt, nodes=golden_nodes)
 
     def generate_completion(self, progress_bar: bool = True) -> Iterator[dict[str, str]]:
         """Pipeline for evocodebench generation."""
@@ -137,6 +151,8 @@ class TestInference:
         for _, task in bar:
             task_path = self.repos_path / task["completion_path"]
             namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
+            repo_name = Path(task["project_path"]).parts[-1]
+
             prompt = build_prompt(
                 completion_path=task["completion_path"],
                 namespace=task["namespace"],
@@ -144,22 +160,31 @@ class TestInference:
                 requirement=task["requirement"],
                 completion_type=task["type"],
             )
-            generation, _meta = self(
-                repo_name=Path(task["project_path"]).parts[-1],
-                prompt=prompt,
-                node_namespace=namespace,
-            )
+            if not self.use_gold_context:
+                generation, _meta = self(
+                    repo_name=repo_name,
+                    prompt=prompt,
+                    node_namespace=namespace,
+                )
+            else:
+                graph = self._prepare_graph(repo_name=repo_name, node_namespace=namespace)
+                gold_nodes = self._get_gold_snippets(task_row=task, graph=graph)
+                if gold_nodes is None:
+                    # gold dependencies are not in our graph
+                    warnings.warn(f"{task['namespace']} got cross file reference not found in graph.")
+                    continue
+                generation, _meta = self._generate_with_golden(
+                    repo_name=repo_name,
+                    prompt=prompt,
+                    node_namespace=namespace,
+                    golden_nodes=gold_nodes,
+                )
 
             result = {
                 "namespace": task["namespace"],
                 "completion": generation,
             }
             yield result
-
-    def retrieve(self, repo_name: str, prompt: str, node_namespace: str) -> list[Node]:
-        graph = self._prepare_graph(repo_name, node_namespace)
-        inference = self.inference_cfg.create(graph=graph)
-        return inference.retrieve(prompt)
 
     def _get_gold_snippets(self, task_row, graph: Data) -> list[Node] | None:
         indices = []
@@ -214,6 +239,7 @@ class TestInferenceConfig(BaseModel):
     task_path: Path
     repos_path: Path
     only_with_cross_file: bool = True
+    use_gold_context: bool = False
 
     def create(self) -> TestInference:
         return TestInference(
@@ -222,4 +248,5 @@ class TestInferenceConfig(BaseModel):
             task_path=self.task_path,
             repos_path=self.repos_path,
             only_with_cross_file=self.only_with_cross_file,
+            use_gold_context=self.use_gold_context,
         )

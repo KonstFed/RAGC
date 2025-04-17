@@ -89,7 +89,7 @@ if __name__ == "__main__":
     args = parse_args()
     print("args:")
     pprint(args.__dict__)
-    pprint("-" * 256)
+    print("-" * 256)
 
 
     # run generation

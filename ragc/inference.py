@@ -32,6 +32,13 @@ class Inference:
         result["retrieved_context"] = relevant_nodes
         return answer, result
 
+    def generate_with_context(self, query: str, nodes: list[Node]) -> tuple[str, dict]:
+        """Perform inference skipping retrieval with given nodes as relevant."""
+        result = self.fusion.fuse_and_generate(query=query, relevant_nodes=nodes)
+        answer = result.pop("answer")
+        result["retrieved_context"] = nodes
+        return answer, result
+
     def retrieve(self, query: str) -> list[Node]:
         """Make only retrieval."""
         query_emb = self.query_embedder.embed([query])[0]
