@@ -22,27 +22,32 @@ def build_prompt(
     requirement: dict[str, str],
     completion_type: Literal["function", "method"],
 ) -> str:
-    requirement_str = "".join(f"## {key}\n{value}" for key, value in requirement.items())
-    prompt = f"""Your task is to generate a Python {completion_type} based on the following details:
+    requirement_str = "\n".join([f"- **{key}**: {value}" for key, value in requirement.items()])
+    prompt = f"""# TASK
 
-# Completion path
-`{completion_path}`
+You are to generate a Python {completion_type} implementation that strictly follows the instructions below. Return ONLY the code inside a ```python ``` block, no explanations.
 
-# Namespace
-`{namespace}`
+## Context Usage
 
-# Requirements
+Any supplementary context provided is retrieved automatically.
+You should use it only if it is directly relevant and improves the implementation.
+Disregard irrelevant or conflicting information.
+
+## File Location
+
+- **Path**: `{completion_path}`
+- **Namespace**: `{namespace}`
+
+## Requirements
+
 {requirement_str}
 
-# {completion_type.title()} signature
-```
-{signature}
-```
-# Answer format
-It is very important, that your answer should only include a {completion_type} body without additional text and explanations of any kind.
-"""
-    return prompt
+## Signature to Implement
 
+{signature}
+
+Your code here:\n"""
+    return prompt
 
 def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> dict:
     """Transform namespace of evocodebench into graph namespace."""
