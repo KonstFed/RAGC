@@ -2,9 +2,6 @@ import re
 
 import pandas as pd
 
-from ragc.graphs.ast_tools import PythonExtractHelper, to_zero_ident
-
-
 def extract_python_code_blocks(text):
     """Extract only Python code blocks from text, ignoring all other content."""
     pattern = r"```python(.*?)```"
@@ -29,6 +26,5 @@ def clean_single(code: str) -> str:
 
 def clean(completions: pd.DataFrame) -> pd.DataFrame:
     """Standartize LLM output for insertion into tests."""
-    helper = PythonExtractHelper()
-    completions["completion"] = completions["completion"].apply(clean_single, helper=helper)
+    completions["completion"] = completions["completion"].apply(clean_single)
     return completions
