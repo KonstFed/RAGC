@@ -1,5 +1,6 @@
-from typing import Literal
+from typing import Literal, Any
 
+from pydantic import Field
 import torch
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
@@ -76,7 +77,7 @@ class HuggingFaceEmbedderConfig(BaseEmbederConfig):
 
 
 class HuggingFaceGenerator(BaseGenerator):
-    def __init__(self, model: str, temperature: float | None = None):
+    def __init__(self, model: str, tokenizer_kwargs: dict, generation_kwargs: dict):
         self.model_name = model
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -85,21 +86,28 @@ class HuggingFaceGenerator(BaseGenerator):
 
         self.tokenizer = AutoTokenizer.from_pretrained(model, padding_side="left")
 
-        _generation_params = {
-            "temperature": temperature,
-        }
-
-        self._generation_params = {k: v for k, v in _generation_params.items() if v is not None}
+        self._tokenizer_kwargs = tokenizer_kwargs
+        self._generation_kwargs = generation_kwargs
 
     def generate(self, prompt: str) -> str:
-        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
-        generated_ids = self.model.generate(**model_inputs, **self._generation_params)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt", **self._tokenizer_kwargs).to(self.device)
+        input_length = model_inputs.input_ids.shape[1]
+
+        generated_ids = self.model.generate(**model_inputs, **self._generation_kwargs)
+        generated_ids = generated_ids[0, input_length:]
         return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
 
 class HuggingFaceGeneratorConfig(BaseGeneratorConfig):
+    type: Literal["hugging_face"] = "hugging_face"
     model: str
-    temperature: float | None = None
+
+    tokenizer_kwargs: dict[str, Any] = Field(default_factory=dict)
+    generation_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     def create(self) -> HuggingFaceGenerator:
-        return HuggingFaceGenerator(model=self.model, temperature=self.temperature)
+        return HuggingFaceGenerator(
+            model=self.model,
+            tokenizer_kwargs=self.tokenizer_kwargs,
+            generation_kwargs=self.generation_kwargs,
+        )

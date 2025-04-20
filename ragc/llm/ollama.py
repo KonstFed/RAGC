@@ -32,6 +32,8 @@ class OllamaEmbedderConfig(BaseEmbederConfig):
 
 
 class OllamaGenerator(BaseGenerator):
+    type: Literal["ollama_embedding"] = "ollama_generator"
+
     def __init__(self, ollama_url: str, model: str):
         self.client = ollama.Client(ollama_url)
         self.model = model
