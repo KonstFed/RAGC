@@ -1,9 +1,10 @@
 from typing import Literal
 
 import torch
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 from ragc.llm.embedding import BaseEmbedder, BaseEmbederConfig
+from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig
 
 
 class HuggingFaceEmbedder(BaseEmbedder):
@@ -72,3 +73,33 @@ class HuggingFaceEmbedderConfig(BaseEmbederConfig):
             max_length=self.max_length,
             store_in_gpu=self.store_in_gpu,
         )
+
+
+class HuggingFaceGenerator(BaseGenerator):
+    def __init__(self, model: str, temperature: float | None = None):
+        self.model_name = model
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.model = AutoModelForCausalLM.from_pretrained(model, device_map="auto")
+        self.model.to(self.device)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model, padding_side="left")
+
+        _generation_params = {
+            "temperature": temperature,
+        }
+
+        self._generation_params = {k: v for k, v in _generation_params.items() if v is not None}
+
+    def generate(self, prompt: str) -> str:
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.device)
+        generated_ids = self.model.generate(**model_inputs, **self._generation_params)
+        return self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+
+class HuggingFaceGeneratorConfig(BaseGeneratorConfig):
+    model: str
+    temperature: float | None = None
+
+    def create(self) -> HuggingFaceGenerator:
+        return HuggingFaceGenerator(model=self.model, temperature=self.temperature)
