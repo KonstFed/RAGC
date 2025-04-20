@@ -25,7 +25,7 @@ def build_prompt(
     requirement_str = "\n".join([f"- **{key}**: {value}" for key, value in requirement.items()])
     prompt = f"""# TASK
 
-You are to generate a Python {completion_type} implementation that strictly follows the instructions below. Return ONLY the code inside a ```python ``` block, no explanations.
+You are to generate a Python {completion_type} implementation that strictly follows the instructions below. Return ONLY the code inside a ```python ``` block, no explanations. Do not forget about imports.
 
 ## Context Usage
 
