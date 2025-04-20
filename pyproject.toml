@@ -34,6 +34,7 @@ pyvis = "^0.3.2"
 pcst-fast = "^1.0.10"
 transformers = "^4.50.1"
 black = "^25.1.0"
+accelerate = ">=0.26.0"
 
 [tool.ruff]  # Configuration for Ruff
 
