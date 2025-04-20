@@ -5,7 +5,7 @@ from pprint import pprint
 
 from ragc.test.test_config import TestInferenceConfig
 from ragc.utils import load_config
-from ragc.test.clean import clean_single, PythonExtractHelper
+from ragc.test.clean import clean_single
 
 
 def parse_args():
@@ -54,8 +54,6 @@ def generate_completions(
     f = open(raw_output_path, "w")
     f.close()
 
-    extract_helper = PythonExtractHelper()
-
     for result in test_inference.generate_completion():
         # change if we have multiple pass@k > 1
         result["idx"] = 0
@@ -64,7 +62,7 @@ def generate_completions(
             json_line = json.dumps(result)
             f.write(json_line + "\n")
 
-        result["completion"] = clean_single(result["completion"], extract_helper)
+        result["completion"] = clean_single(result["completion"])
 
         with open(output_path, "a") as f:
             json_line = json.dumps(result)
