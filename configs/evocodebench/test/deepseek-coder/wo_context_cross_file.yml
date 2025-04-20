@@ -9,9 +9,7 @@ inference:
     max_length: 1024
     store_in_gpu: false
   retrieval:
-    type: pcst
-    n_subgraphs: 1
-    ntop: 5
+    type: no_retrieval
   fusion:
     type: prompt
     prompt:
@@ -19,7 +17,7 @@ inference:
       context_prompt_template_p: prompts/context.txt
     generator:
       ollama_url: http://localhost:11434
-      model: codellama:7b
+      model: deepseek-coder:33b
   n_elems: 5
 dataset:
   root_path: data/torch_cache/evocodebench

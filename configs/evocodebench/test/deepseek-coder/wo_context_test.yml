@@ -26,3 +26,6 @@ dataset:
   parser: null
   pre_transform: null
   transform: null
+task_path: data/evocodebench/tasks_only_cross.jsonl
+repos_path: data/evocodebench/repos/Source_Code
+only_with_cross_file: false
