@@ -67,7 +67,7 @@ class ToHetero(BaseTransform, BaseTransformConfig):
     type: Literal["to_hetero"] = "to_hetero"
 
     @classmethod
-    def to_hetero(graph: Data) -> HeteroData:
+    def to_hetero(cls, graph: Data) -> HeteroData:
         """Transform graph to HeteroData for simplier training."""
         h_graph = HeteroData()
 
@@ -103,7 +103,7 @@ class ToHetero(BaseTransform, BaseTransformConfig):
         return h_graph
 
     def forward(self, data: Data) -> HeteroData:
-        return self.to_hetero(data)
+        return ToHetero.to_hetero(data)
 
     def create(self):
         return self
