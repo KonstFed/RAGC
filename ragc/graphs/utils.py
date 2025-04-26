@@ -3,10 +3,10 @@ from typing import Iterable
 
 import networkx as nx
 import torch
-from torch_geometric.data import Data
+from torch_geometric.data import Data, HeteroData
 from torch_geometric.utils.convert import from_networkx
 
-from ragc.graphs.common import EdgeType, EdgeTypeNumeric, NodeType, NodeTypeNumeric, Node
+from ragc.graphs.common import EdgeType, EdgeTypeNumeric, Node, NodeType, NodeTypeNumeric
 
 nodetype2idx = {
     NodeType.FUNCTION: NodeTypeNumeric.FUNCTION.value,
@@ -173,3 +173,25 @@ def pyg_extract_node(graph: Data, indices: list[int] | None = None) -> list[Node
         )
         nodes.append(n)
     return nodes
+
+
+def remove_isolated(graph: HeteroData, node_type: str) -> HeteroData:
+    """Remove isolated node from hetero graph."""
+    needed_types = [(u, e, v) for u, e, v in graph.edge_types if u == node_type]
+    mask = torch.zeros(graph[node_type].num_nodes, dtype=torch.bool)
+    for ind in needed_types:
+        c_edge_index = graph[ind].edge_index
+        c_mask = torch.zeros(graph[node_type].num_nodes, dtype=torch.bool)
+        c_mask[c_edge_index[0]] = True
+        mask = mask | c_mask
+
+    needed_types = [(u, e, v) for u, e, v in graph.edge_types if v == node_type]
+
+    for ind in needed_types:
+        c_edge_index = graph[ind].edge_index
+        c_mask = torch.zeros(graph[node_type].num_nodes, dtype=torch.bool)
+        c_mask[c_edge_index[1]] = True
+        mask = mask | c_mask
+
+    subset_dict = {node_type: torch.where(mask)[0]}
+    return graph.subgraph(subset_dict)

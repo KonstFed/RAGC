@@ -1,15 +1,15 @@
 import warnings
 from pathlib import Path
 
-import torch
 import networkx as nx
-from pydantic import BaseModel, model_validator, PrivateAttr
-from torch_geometric.data import InMemoryDataset, Data, HeteroData
+import torch
+from pydantic import BaseModel, PrivateAttr, model_validator
+from torch_geometric.data import Data, HeteroData, InMemoryDataset
 from torch_geometric.transforms import Compose
 from tqdm import tqdm
 
 from ragc.graphs import GraphParserConfig
-from ragc.graphs.transforms import Transform
+from ragc.graphs.types import Transform
 
 
 class TorchGraphDataset(InMemoryDataset):
