@@ -117,7 +117,9 @@ class InitFileEmbeddings(BaseTransform):
 
     @staticmethod
     def init_file_embs_by(
-        graph: HeteroData, links: list[tuple[str, str]], only_nodes: torch.Tensor | None = None
+        graph: HeteroData,
+        links: list[tuple[str, str]],
+        only_nodes: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Init file embeddings as mean of given linked nodes inplace.
 
@@ -148,23 +150,34 @@ class InitFileEmbeddings(BaseTransform):
         inited_files = torch.where(n_elements != 0)[0]
         new_file_embeddings[inited_files] = new_file_embeddings[inited_files] / n_elements[inited_files].view(-1, 1)
 
-        file_wo_init = n_elements == 0
         if only_nodes is not None:
             _mask = torch.zeros_like(n_elements, dtype=torch.bool)
             _mask[only_nodes] = True
-            file_wo_init = file_wo_init & _mask
 
-        file_wo_init = torch.where(file_wo_init)[0]
-        graph["FILE"].x = new_file_embeddings
+            file_wo_init = (n_elements == 0) & _mask
+            file_wo_init = torch.where(file_wo_init)[0]
+            graph["FILE"].x[n_elements !=0] = new_file_embeddings[n_elements != 0]
+        else:
+            file_wo_init = torch.where(n_elements == 0)[0]
+            graph["FILE"].x = new_file_embeddings
 
         return file_wo_init
+
+    @staticmethod
+    def init_by_normal(n_samples: int, emb_dim: int) -> torch.Tensor:
+        embs = torch.empty((n_samples, emb_dim))
+        torch.nn.init.normal_(embs, std=0.02)
+        return embs
 
     def forward(self, data: HeteroData) -> HeteroData:
         not_init_idx = InitFileEmbeddings.init_file_embs_by(data, [("OWNER", "CLASS"), ("OWNER", "FUNCTION")])
         not_init_idx = InitFileEmbeddings.init_file_embs_by(
-            data, [("IMPORT", "CLASS"), ("IMPORT", "FUNCTION")], only_nodes=not_init_idx
+            data,
+            [("IMPORT", "CLASS"), ("IMPORT", "FUNCTION")],
+            only_nodes=not_init_idx,
         )
         if len(not_init_idx) != 0:
-            warnings.warn(f"Didn't init files: {not_init_idx}")
+            embs = InitFileEmbeddings.init_by_normal(len(not_init_idx), data["FILE"].x.shape[1])
+            data["FILE"].x[not_init_idx] = embs
 
         return data
