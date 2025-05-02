@@ -1,0 +1,86 @@
+import torch
+from torch_geometric.nn import HeteroConv, SAGEConv
+
+from ragc.train.gnn.models.projector import Projector
+
+
+class HeteroGraphSAGE(torch.nn.Module):
+    """Directed graphsage."""
+
+    def __init__(self, orig_emb_size: int, hidden_dim: int, out_channels: int, num_layers: int):
+        super().__init__()
+        self.convs = torch.nn.ModuleList()
+        for i in range(num_layers):
+            if i == num_layers - 1:
+                layer_conv = self._init_conv_layer(hidden_dim=out_channels)
+            else:
+                layer_conv = self._init_conv_layer(hidden_dim=hidden_dim)
+
+            # Create a SAGEConv for each edge type
+            conv = HeteroConv(layer_conv, aggr="max")
+            self.convs.append(conv)
+
+        self.proj_map = self._init_projectors(orig_emb_size=orig_emb_size, node_emb_size=out_channels)
+
+    def _init_conv_layer(self, hidden_dim: int) -> dict[tuple[str, str, str], torch.nn.Module]:
+        file_conv = SAGEConv((-1, -1), hidden_dim, aggr="max")
+        file_call_conv = SAGEConv((-1, -1), hidden_dim, "max")
+        own_conv = SAGEConv((-1, -1), hidden_dim, "max")
+        call_conv = SAGEConv((-1, -1), hidden_dim, "max")
+
+        block_map = {
+            # file own relations
+            ("FILE", "OWNER", "CLASS"): file_conv,
+            ("FILE", "OWNER", "FUNCTION"): file_conv,
+            # file calls
+            ("FILE", "CALL", "FUNCTION"): file_call_conv,
+            ("FILE", "IMPORT", "FILE"): file_call_conv,
+            ("FILE", "IMPORT", "CLASS"): file_call_conv,
+            ("FILE", "IMPORT", "FUNCTION"): file_call_conv,
+            # own relations
+            ("CLASS", "OWNER", "CLASS"): own_conv,
+            ("CLASS", "OWNER", "FUNCTION"): own_conv,
+            ("FUNCTION", "OWNER", "CLASS"): own_conv,
+            ("FUNCTION", "OWNER", "FUNCTION"): own_conv,
+            # call relations
+            ("CLASS", "CALL", "FUNCTION"): call_conv,
+            ("CLASS", "INHERITED", "CLASS"): call_conv,
+            ("FUNCTION", "CALL", "FUNCTION"): call_conv,
+        }
+        return block_map
+
+    def _init_projectors(self, orig_emb_size: int, node_emb_size: int) -> dict[tuple[str, str, str], torch.nn.Module]:
+        self.file_own_proj = Projector(orig_emb_size, node_emb_size)
+        self.file_call_proj = Projector(orig_emb_size, node_emb_size)
+        self.own_call_proj = Projector(orig_emb_size, node_emb_size)
+        self.call_proj = Projector(orig_emb_size, node_emb_size)
+
+        proj_map = {
+            # file own relations
+            ("FILE", "OWNER", "CLASS"): self.file_own_proj,
+            ("FILE", "OWNER", "FUNCTION"): self.file_own_proj,
+            # file calls
+            ("FILE", "CALL", "FUNCTION"): self.file_call_proj,
+            ("FILE", "IMPORT", "FILE"): self.file_call_proj,
+            ("FILE", "IMPORT", "CLASS"): self.file_call_proj,
+            ("FILE", "IMPORT", "FUNCTION"): self.file_call_proj,
+            # own relations
+            ("CLASS", "OWNER", "CLASS"): self.own_call_proj,
+            ("CLASS", "OWNER", "FUNCTION"): self.own_call_proj,
+            ("FUNCTION", "OWNER", "CLASS"): self.own_call_proj,
+            ("FUNCTION", "OWNER", "FUNCTION"): self.own_call_proj,
+            # call relations
+            ("CLASS", "CALL", "FUNCTION"): self.call_proj,
+            ("CLASS", "INHERITED", "CLASS"): self.call_proj,
+            ("FUNCTION", "CALL", "FUNCTION"): self.call_proj,
+        }
+        return proj_map
+
+    def forward(self, x, edge_dict):
+        for conv in self.convs:
+            # Process all edge types and update node features
+            x_dict = conv(x, edge_dict)
+            # Apply ReLU to all node types
+            x_dict = {key: x.relu() for key, x in x_dict.items()}
+
+        return x_dict
