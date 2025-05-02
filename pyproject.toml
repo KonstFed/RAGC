@@ -10,7 +10,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.dependencies]
 python = "3.11.*"
-reprocess = {path = "../ReProcess", develop = true}
 semantic_parser = {path="../SemanticGraphParser", develop = true}
 tqdm = "^4"
 pandas = "^1.5"
