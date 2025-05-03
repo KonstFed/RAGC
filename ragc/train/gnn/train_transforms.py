@@ -1,7 +1,7 @@
 import torch
 from torch_geometric.data import HeteroData
 from torch_geometric.transforms import BaseTransform
-
+from ragc.graphs.hetero_utils import remove_caller_subgraph, get_all_components
 
 class InverseEdges(BaseTransform):
     """Inverse all edges for hetero graph."""
@@ -108,3 +108,90 @@ class SamplePairs(BaseTransform):
             samples[link] = (pos, neg)
         data.samples = samples
         return data
+
+
+from torch_geometric.transforms import BaseTransform
+
+
+class SampleCallPairsSubgraph(BaseTransform):
+    """Sample from graph pairs of function that need to count retrieval metrics.
+
+    To avoid dataleak will also make subgraph."""
+
+    def get_func_candidates(self, graph: HeteroData, mask: dict[str, torch.Tensor]):
+        call_edge_index = graph["FUNCTION", "CALL", "FUNCTION"].edge_index
+        not_called = torch.ones(graph["FUNCTION"].num_nodes, dtype=torch.bool)
+        not_called[call_edge_index[1]] = False
+
+        # only use func from that component
+        not_called = not_called & mask["FUNCTION"]
+        # should call someone
+        cand_edge_index = call_edge_index[:, not_called[call_edge_index[0]]]
+        not_called = cand_edge_index[0].unique()
+
+        reduced_graph_mask = remove_caller_subgraph(graph, not_called, return_mask=True)
+
+        cand_edge_index = cand_edge_index[:, torch.where(reduced_graph_mask["FUNCTION"][cand_edge_index[1]])[0]]
+        return reduced_graph_mask, cand_edge_index
+
+    def forward(self, data: HeteroData) -> HeteroData:
+        components = get_all_components(data)
+        graph_mask = {n: torch.zeros(data[n].num_nodes, dtype=torch.bool) for n in data.node_types}
+
+        all_candidates = torch.tensor([], dtype=torch.int64)
+        for comp in components:
+            # it is required that components do not intersect
+            this_comp_mask, candidates = self.get_func_candidates(data, mask=comp)
+            for k in graph_mask:
+                graph_mask[k] = graph_mask[k] | (this_comp_mask[k] & comp[k])
+
+            all_candidates = torch.concat([all_candidates, candidates], dim=1)
+
+        if all_candidates.shape[1] == 0:
+            # TODO: what to do if no candidate.
+            return data
+
+        # torch unique for some reason make them in
+        all_candidates, _indices = torch.sort(all_candidates, dim=1, stable=True)
+
+        new_indices = []
+        mapping = {}
+        embs = []
+        n_sampled_nodes = 0
+        for s_func in all_candidates[0]:
+            s_func = int(s_func)
+            if s_func in mapping:
+                idx = mapping[s_func]
+            else:
+                mapping[s_func] = n_sampled_nodes
+                idx = n_sampled_nodes
+                n_sampled_nodes += 1
+                embs.append(data["FUNCTION"].x[s_func])
+
+            new_indices.append(idx)
+
+        assert len(all_candidates[0].unique()) == len(embs), f"{len(embs)} {len(all_candidates[0].unique())}"
+        assert len(embs) == n_sampled_nodes
+
+        embs = torch.stack(embs)
+        new_indices = torch.tensor(new_indices, dtype=torch.int64)
+
+        # new node to old node mapping
+        new_mapping = torch.nonzero(graph_mask["FUNCTION"]).flatten().tolist()
+        new_dst = []
+
+        for dst_idx in all_candidates[1]:
+            new_dst.append(new_mapping.index(dst_idx))
+
+        new_dst = torch.tensor(new_dst, dtype=torch.int64)
+        pairs = torch.stack([new_indices, new_dst], dim=0)
+
+        new_graph = data.subgraph(graph_mask)
+        new_graph["pairs"] = {"FUNCTION": pairs}
+        new_graph["init_embs"] = {"FUNCTION": embs}
+
+        # for l, r in zip(embs, data["FUNCTION"].x[all_candidates[0].unique()], strict=True):
+        #     if not torch.allclose(l, r):
+        #         raise ValueError
+
+        return new_graph

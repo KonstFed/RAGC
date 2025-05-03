@@ -156,7 +156,7 @@ class InitFileEmbeddings(BaseTransform):
 
             file_wo_init = (n_elements == 0) & _mask
             file_wo_init = torch.where(file_wo_init)[0]
-            graph["FILE"].x[n_elements !=0] = new_file_embeddings[n_elements != 0]
+            graph["FILE"].x[n_elements != 0] = new_file_embeddings[n_elements != 0]
         else:
             file_wo_init = torch.where(n_elements == 0)[0]
             graph["FILE"].x = new_file_embeddings
