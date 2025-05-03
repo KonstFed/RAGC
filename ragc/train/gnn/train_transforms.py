@@ -109,10 +109,6 @@ class SamplePairs(BaseTransform):
         data.samples = samples
         return data
 
-
-from torch_geometric.transforms import BaseTransform
-
-
 class SampleCallPairsSubgraph(BaseTransform):
     """Sample from graph pairs of function that need to count retrieval metrics.
 
@@ -148,7 +144,8 @@ class SampleCallPairsSubgraph(BaseTransform):
             all_candidates = torch.concat([all_candidates, candidates], dim=1)
 
         if all_candidates.shape[1] == 0:
-            # TODO: what to do if no candidate.
+            data.pairs = torch.zeros((2, 0), dtype=torch.int64)
+            data.init_embs = torch.zeros(0)
             return data
 
         # torch unique for some reason make them in
@@ -187,8 +184,8 @@ class SampleCallPairsSubgraph(BaseTransform):
         pairs = torch.stack([new_indices, new_dst], dim=0)
 
         new_graph = data.subgraph(graph_mask)
-        new_graph["pairs"] = {"FUNCTION": pairs}
-        new_graph["init_embs"] = {"FUNCTION": embs}
+        new_graph.pairs = pairs
+        new_graph.init_embs = embs
 
         # for l, r in zip(embs, data["FUNCTION"].x[all_candidates[0].unique()], strict=True):
         #     if not torch.allclose(l, r):

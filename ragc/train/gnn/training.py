@@ -9,9 +9,9 @@ from tqdm import tqdm
 
 from ragc.datasets.train_dataset import TorchGraphDataset
 from ragc.graphs.hetero_transforms import DropIsolated, InitFileEmbeddings, RemoveExcessInfo, ToHetero
-from ragc.train.gnn.data_utils import collate_with_samples, train_val_test_split
+from ragc.train.gnn.data_utils import collate_with_samples, train_val_test_split, collate_for_validation
 from ragc.train.gnn.models.hetero_graphsage import HeteroGraphSAGE
-from ragc.train.gnn.train_transforms import InverseEdges, SamplePairs
+from ragc.train.gnn.train_transforms import InverseEdges, SamplePairs, SampleCallPairsSubgraph
 
 
 def compute_loss(
@@ -112,7 +112,7 @@ def predict(model, batch: HeteroData, node_embeddings: dict[str, torch.Tensor]):
     return predictions, target
 
 
-def eval_loader(model, device, loader):
+def eval_classification(model, device, loader):
     model.eval()
     bar = tqdm(loader)
 
@@ -144,9 +144,66 @@ def eval_loader(model, device, loader):
             counter[link_type] == g_predictions[link_type].shape[0]
         )
         score = roc_auc_score(g_target[link_type].cpu().numpy(), g_predictions[link_type].cpu().numpy())
-        # acc = auc(g_target[link_type].cpu().numpy(), g_predictions[link_type].cpu().numpy())
         metrics[link_type] = score
     return metrics
+
+
+def retrieve(
+    model, node_embeddings: dict[str, torch.Tensor], init_embeddings: torch.Tensor, k: int = 0
+) -> torch.Tensor:
+    projected_embs = model.proj_map["FUNCTION", "CALL", "FUNCTION"](init_embeddings)
+
+    # l2 normalize for cos distance
+    projected_embs = F.normalize(projected_embs, p=2, dim=1)
+
+    f_embs = node_embeddings["FUNCTION"]
+    f_embs = F.normalize(f_embs, dim=1, p=2)
+
+    cosine_distances = projected_embs @ f_embs.T
+    _values, indices = torch.topk(cosine_distances, k=k, dim=1)
+    return indices
+
+
+def eval_retrieval(model, device, loader, k: int = 3) -> dict[str, float]:
+    """Compute retrieval metrics."""
+    model.eval()
+    bar = tqdm(loader)
+
+    actual = []
+    predicted = []
+    with torch.no_grad():
+        for batched_graph in bar:
+            batched_graph.to(device)
+            node_embeddings = model(batched_graph.x_dict, batched_graph.edge_index_dict)
+            # nodes for which we want to predict
+            to_predict = batched_graph.pairs[0].unique()
+
+            # get actual relevant nodes
+            c_actual = [[] for _ in range(len(to_predict))]
+            for n, relevant_f in batched_graph.pairs.T:
+                c_actual[n].append(relevant_f)
+
+            og_embs = batched_graph.init_embs[to_predict]
+            pred_relevant = retrieve(model, node_embeddings, og_embs, k=k)
+
+            actual.extend(c_actual)
+            predicted.extend(pred_relevant.tolist())
+
+    assert len(actual) == len(predicted)
+
+    recalls = []
+    precisions = []
+    for actual_nodes, pred_nodes in zip(actual, predicted, strict=True):
+        tp = len(set(actual_nodes).intersection(pred_nodes))
+        recall = tp / len(actual_nodes)
+        precision = tp / len(pred_nodes)
+        recalls.append(recall)
+        precisions.append(precision)
+
+    return {
+        "recall": sum(recalls) / len(recalls),
+        "precision": sum(precisions) / len(precisions),
+    }
 
 
 def train():
@@ -161,11 +218,19 @@ def train():
             InitFileEmbeddings(),
             SamplePairs([("FUNCTION", "CALL", "FUNCTION"), ("CLASS", "OWNER", "FUNCTION")], 0.2, 10, 100),
             InverseEdges(rev_suffix=""),
-            pair_sampler,
         ]
     )
 
-    val_transform = train_transform
+    val_transform = Compose(
+        [
+            ToHetero(),
+            RemoveExcessInfo(),
+            SampleCallPairsSubgraph(),
+            DropIsolated("FILE"),
+            InitFileEmbeddings(),
+            InverseEdges(rev_suffix=""),
+        ]
+    )
 
     ds = TorchGraphDataset(
         root="data/torch_cache/repobench",
@@ -179,7 +244,7 @@ def train():
     )
 
     loader = DataLoader(train_ds, batch_size=BATCH_SIZE, collate_fn=collate_with_samples, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, collate_fn=collate_with_samples, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, collate_fn=collate_for_validation, shuffle=False)
 
     device = torch.device("cpu")
 
@@ -198,10 +263,11 @@ def train():
     for epoch in range(300):
         print(f"--------Epoch {epoch}-------")
         print("Training")
-        train_epoch(model, triplet_loss, device, optimizer, loader)
+        # train_epoch(model, triplet_loss, device, optimizer, loader)
         print("Calculate metrics:")
-        metrics = eval_loader(model, device, val_loader)
+        metrics = eval_retrieval(model, device, val_loader)
         print(metrics)
+
 
 if __name__ == "__main__":
     train()

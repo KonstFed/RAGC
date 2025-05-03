@@ -80,3 +80,43 @@ def collate_with_samples(batch: list[HeteroData]) -> Batch:
                 pairs[link_type] = (pos, neg)
     hetero_batch.samples = pairs
     return hetero_batch
+
+
+
+def collate_for_validation(batch: list[HeteroData]) -> Batch:
+    """Collate hetero graphs with sampled pairs for validation."""
+    pairs = [b.pairs for b in batch if b.pairs.shape[1] != 0]
+    init_embs = [b.init_embs for b in batch if len(b.init_embs) != 0]
+    for b in batch:
+        del b.pairs
+        del b.init_embs
+
+    hetero_batch = Batch.from_data_list(batch)
+
+    collated_pairs = None
+    collated_embs = None
+
+    init_embs_offset = 0
+    in_graph_offsets = hetero_batch["FUNCTION"].ptr
+    for i in range(len(pairs)):
+        edge_index = pairs[i]
+
+        # init embs offset
+        edge_index[0] += init_embs_offset
+        init_embs_offset = edge_index[0].max()
+
+        # update in graph connections
+        edge_index[1] += in_graph_offsets[i]
+
+        # collate embs
+
+        if collated_pairs is None:
+            collated_pairs = edge_index
+            collated_embs = init_embs[i]
+        else:
+            collated_pairs = torch.concat([collated_pairs, edge_index], dim=1)
+            collated_embs = torch.concat([collated_embs, init_embs[i]], dim=0)
+
+    hetero_batch["pairs"] = collated_pairs
+    hetero_batch["init_embs"] = collated_embs
+    return hetero_batch
