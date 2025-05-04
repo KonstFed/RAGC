@@ -4,7 +4,7 @@ from torch import nn
 
 
 class TripletLoss:
-    def __init__(self, loss_kwargs: dict):
+    def __init__(self, **loss_kwargs: dict):
         self._triplet_loss = nn.TripletMarginLoss(
             **loss_kwargs,
         )

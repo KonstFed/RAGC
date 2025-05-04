@@ -1,7 +1,11 @@
 import torch
+import torch.nn.functional as F
 from torch_geometric.data import HeteroData
 from torch_geometric.transforms import BaseTransform
 from ragc.graphs.hetero_utils import remove_caller_subgraph, get_all_components
+from ragc.train.gnn.data_utils import stable_sort_edge_index
+from ragc.train.gnn.data_utils import unbatch_with_positives
+
 
 class InverseEdges(BaseTransform):
     """Inverse all edges for hetero graph."""
@@ -40,6 +44,12 @@ class InverseEdges(BaseTransform):
 
             # Store reversed edges
             data[dst, new_edge_type[1], src].edge_index = reversed_edge_index
+
+
+        if "positives" in data:
+            data.positives = {tuple(list(k)[::-1]):v for k,v in data.positives.items()}
+        if "positives_ptr" in data:
+            data.positives_ptr = {tuple(list(k)[::-1]):v for k,v in data.positives_ptr.items()}
         return data
 
 
@@ -109,6 +119,144 @@ class SamplePairs(BaseTransform):
         data.samples = samples
         return data
 
+
+class PositiveSampler(BaseTransform):
+    """Sample only positive edge for training."""
+
+    def __init__(self, links: list[tuple[str, str, str]], sample_ratio: float, min_size: int, max_size: int):
+        self.links = links
+        self.sample_ratio = sample_ratio
+        self.min_size = min_size
+        self.max_size = max_size
+
+    def forward(
+        self,
+        data: HeteroData,
+    ) -> tuple[HeteroData, dict[tuple[str, str, str], tuple[torch.Tensor, torch.Tensor]]]:
+        samples = {}
+        for link in self.links:
+            edge_index = data[link].edge_index
+            possible_candidates = torch.unique(edge_index[0])
+            n_samples = max(round(len(possible_candidates) * self.sample_ratio), self.min_size)
+            n_samples = min(self.max_size, n_samples, edge_index.size(1))
+
+            # positive pairs
+            perm = torch.randperm(len(possible_candidates))
+            idx = perm[: min(n_samples, len(perm))]
+            pos_samples = possible_candidates[idx]
+            samples[link] = pos_samples
+
+        data.positives = samples
+        return data
+
+
+class HardSampler:
+    ### VERY IMPORTANT: edges will be reversed here for correct message passing
+    def __init__(self, greedy: bool = True):
+        self.greedy= greedy
+
+    def get_cosine_sim_matrix(self, projected_emds: torch.Tensor, node_embeddings: torch.Tensor) -> torch.Tensor:
+        projected_embs = F.normalize(projected_emds, p=2, dim=1)
+        node_embeddings = F.normalize(node_embeddings, dim=1, p=2)
+        return projected_embs @ node_embeddings.T
+
+    def greedy_choice(self, distances: torch.Tensor, k: int) -> torch.Tensor:
+        _values, indices = distances.topk(k=min(k, len(distances)))
+        if len(indices) < k:
+            diff = k - len(indices)
+            additional_indices = indices[torch.randint(len(indices), size=(diff,))].clone()
+            indices = torch.cat([indices, additional_indices], dim=0)
+        return indices
+
+
+    def forward_single(
+        self,
+        positive_nodes: torch.Tensor,
+        edge_index: torch.Tensor,
+        dst_embeddings: torch.Tensor,
+        positive_projected_embs: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        cosine_distances = self.get_cosine_sim_matrix(positive_projected_embs, dst_embeddings)
+
+        g_pos = []
+        g_neg = []
+
+        for i, pos_node in enumerate(positive_nodes):
+            positive_pairs = edge_index[:, edge_index[1] == pos_node]
+            n_pairs = positive_pairs.shape[1]
+
+            mapping = torch.ones(dst_embeddings.shape[0], dtype=torch.bool)
+            mapping[positive_pairs[0]] = False
+
+            negative_candidates = cosine_distances[i][mapping]
+            mapping = torch.where(mapping)[0]
+
+            neg_indices = self.greedy_choice(negative_candidates, n_pairs)
+            neg_indices = mapping[neg_indices]
+            neg_pairs = torch.stack([neg_indices, positive_pairs[1]], dim=0)
+            # (positive_pairs, neg_pairs)
+
+            g_pos.append(positive_pairs)
+            g_neg.append(neg_pairs)
+
+        g_pos = torch.cat(g_pos, dim=1)
+        g_neg = torch.cat(g_neg, dim=1)
+        return g_pos, g_neg
+
+    def forward(self, data: HeteroData, link_type: tuple[str, str, str], node_embbeddings: torch.Tensor, positive_projected_embs: torch.Tensor,):
+        graphs = unbatch_with_positives(data)
+        src, _edge, dst = link_type
+
+        positive_pairs = []
+        negative_pairs = []
+
+        for i, graph in enumerate(graphs):
+            p_start = data.positives_ptr[link_type][i]
+            p_end = data.positives_ptr[link_type][i+1]
+            cur_proj_embs = positive_projected_embs[p_start:p_end]
+
+            cur_node_embs = node_embbeddings[src]
+            start = data[src].ptr[i]
+            end = data[src].ptr[i+1]
+            cur_node_embs = cur_node_embs[start:end]
+
+            cur_pos_pairs, cur_neg_pairs = self.forward_single(
+                positive_nodes=graph.positives[link_type],
+                edge_index=graph[link_type].edge_index,
+                dst_embeddings=cur_node_embs,
+                positive_projected_embs=cur_proj_embs,
+            )
+
+            if (cur_pos_pairs[1] != cur_neg_pairs[1]).sum() != 0:
+                raise ValueError("Sanity check")
+
+            cur_pos_pairs[0] += data[src].ptr[i]
+            cur_pos_pairs[1] += data[dst].ptr[i]
+            cur_neg_pairs[0] += data[src].ptr[i]
+            cur_neg_pairs[1] += data[dst].ptr[i]
+
+            positive_pairs.append(cur_pos_pairs)
+            negative_pairs.append(cur_neg_pairs)
+
+            if (cur_pos_pairs[1] != cur_neg_pairs[1]).sum() != 0:
+                raise ValueError("Sanity check")
+
+        positive_pairs = torch.cat(positive_pairs, dim=1)
+        negative_pairs = torch.cat(negative_pairs, dim=1)
+
+        # for l in samples:
+        #     src, _edge, dst = l
+        #     for src_idx, dst_idx in samples[l].T:
+        #         src_ptr = data[src].ptr[src_idx]
+        #         dst_ptr = data[dst].ptr[dst_idx]
+        #         if src_ptr != dst_ptr:
+        #             raise ValueError("Sanity check")
+
+        #         if src_ptr >= data[src].num_nodes or dst_ptr >= data[dst].num_nodes:
+        #             raise ValueError("Sanity check")
+        return positive_pairs, negative_pairs
+
+
 class SampleCallPairsSubgraph(BaseTransform):
     """Sample from graph pairs of function that need to count retrieval metrics.
 
@@ -134,7 +282,7 @@ class SampleCallPairsSubgraph(BaseTransform):
         components = get_all_components(data)
         graph_mask = {n: torch.zeros(data[n].num_nodes, dtype=torch.bool) for n in data.node_types}
 
-        all_candidates = torch.tensor([], dtype=torch.int64)
+        all_candidates = torch.tensor([[], []], dtype=torch.int64)
         for comp in components:
             # it is required that components do not intersect
             this_comp_mask, candidates = self.get_func_candidates(data, mask=comp)
@@ -148,9 +296,7 @@ class SampleCallPairsSubgraph(BaseTransform):
             data.init_embs = torch.zeros(0)
             return data
 
-        # torch unique for some reason make them in
-        all_candidates, _indices = torch.sort(all_candidates, dim=1, stable=True)
-
+        all_candidates = stable_sort_edge_index(all_candidates)
         new_indices = []
         mapping = {}
         embs = []
@@ -186,9 +332,5 @@ class SampleCallPairsSubgraph(BaseTransform):
         new_graph = data.subgraph(graph_mask)
         new_graph.pairs = pairs
         new_graph.init_embs = embs
-
-        # for l, r in zip(embs, data["FUNCTION"].x[all_candidates[0].unique()], strict=True):
-        #     if not torch.allclose(l, r):
-        #         raise ValueError
 
         return new_graph

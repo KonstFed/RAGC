@@ -4,6 +4,7 @@ from typing import Literal
 import torch
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.transforms import BaseTransform
+from torch_geometric.utils import coalesce, remove_self_loops
 
 from ragc.graphs.common import EdgeTypeNumeric, NodeTypeNumeric
 from ragc.graphs.transforms import BaseTransformConfig
@@ -104,6 +105,11 @@ class RemoveExcessInfo(BaseTransform):
         for node_type in data.node_types:
             for attr in ["signature", "docstring", "name"]:
                 del data[node_type][attr]
+
+        data = data.coalesce()
+
+        for edge_type in data.edge_types:
+            data[edge_type].edge_index, _ = remove_self_loops(data[edge_type].edge_index)
 
         return data
 
