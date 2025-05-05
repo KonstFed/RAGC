@@ -335,6 +335,9 @@ class Trainer:
             retrieval_metrics = self.validate_retrieval_epoch(self.val_loader, k=self.retrieve_k)
             print(retrieval_metrics)
 
+            torch.save(self.model, "LAST_CHECKPOINT.pt")
+
+
 
 def train():
     ds = TorchGraphDataset(

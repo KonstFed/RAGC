@@ -3,7 +3,7 @@ from torch_geometric.nn import HeteroConv, SAGEConv
 
 from ragc.train.gnn.models.projector import Projector
 import torch.nn.functional as F
-from torch_geometric.data import Batch
+from torch_geometric.data import Batch, HeteroData
 
 
 class HeteroGraphSAGE(torch.nn.Module):
@@ -87,6 +87,19 @@ class HeteroGraphSAGE(torch.nn.Module):
 
         return x_dict
 
+    def retrieve_single(
+        self,
+        link_type: tuple[str, str, str],
+        query: torch.Tensor,
+        node_embeddings: torch.Tensor,
+        k: int,
+    ) -> torch.Tensor:
+        projected = self.proj_map[link_type](query)
+        projected = F.normalize(projected, dim=0)
+        node_embeddings = F.normalize(node_embeddings, dim=1)
+        cos_sim = torch.matmul(projected, node_embeddings.T)
+        _values, indices = cos_sim.topk(k=k)
+        return indices
 
     def retrieve(
         self,
