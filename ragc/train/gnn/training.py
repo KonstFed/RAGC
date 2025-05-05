@@ -322,7 +322,7 @@ class Trainer:
         }
 
     def train(self):
-        for epoch in range(300):
+        for epoch in range(100):
             print(f"--------Epoch {epoch}-------")
             print("Training")
             self.train_epoch()
@@ -351,7 +351,7 @@ def train():
     model = HeteroGraphSAGE(768, 768, 768, 3)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    trainer = Trainer(model=model, loss_fn=triplet_loss, dataset=ds, batch_size=10, optimizer=optimizer, retrieve_k=3)
+    trainer = Trainer(model=model, loss_fn=triplet_loss, dataset=ds, batch_size=52, optimizer=optimizer, retrieve_k=5)
     trainer.train()
 
 
