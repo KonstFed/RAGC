@@ -2,10 +2,11 @@ from typing import Literal, Any
 
 from pydantic import Field
 import torch
-from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+from ragc.graphs.common import Node
 from ragc.llm.embedding import BaseEmbedder, BaseEmbederConfig
-from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig
+from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig, AugmentedGenerator, AugmentedGeneratorConfig
 
 
 class HuggingFaceEmbedder(BaseEmbedder):
@@ -110,4 +111,119 @@ class HuggingFaceGeneratorConfig(BaseGeneratorConfig):
             model=self.model,
             tokenizer_kwargs=self.tokenizer_kwargs,
             generation_kwargs=self.generation_kwargs,
+        )
+
+
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
+    def __init__(self, model_path: str):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            truncation_side='left'
+        )
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            # torch_dtype=torch.bfloat16,
+            quantization_config=quantization_config,
+            device_map=self.device,
+        )
+
+        # truncation settings
+        self.max_input = 16 * 1024
+        self.max_gen = 8 * 1024
+
+        # debug variable
+        self.trunc_inputs = 0
+        self.trunc_gens = 0
+
+    def __align(self, generation: str, query: str) -> str:
+        # try to find required namespace completion
+        namespace_comm = query.split('\n')[0].strip()
+        try:
+            generation = generation[generation.index(namespace_comm):]
+        except ValueError:
+            print('WARNING: Alignment failed - completion not found!')
+        
+        # remove signatures
+        lines = generation.split('\n')
+        start_ix = 0
+        while start_ix < len(lines) - 1 and not lines[start_ix].startswith('def '):
+            start_ix += 1
+    
+        # dedent
+        end_ix = len(lines) - 1
+        while end_ix >= 0 and not lines[end_ix].startswith('    '):
+            end_ix -= 1
+    
+        # strip end tokens
+        completion = '\n'.join(lines[start_ix + 1:end_ix + 1])\
+            .strip('\n')\
+            .strip('<｜end▁of▁sentence｜>')
+        
+        return completion
+
+    def __prompt(self, query: str, relevant_nodes: list[Node]) -> str:
+        # sort by length
+        relevant_nodes = sorted(relevant_nodes, key=lambda x: -len(x.code))
+        
+        docs = []
+        for node in relevant_nodes:
+            docs.append(f'#{node.file_path}\n{node.code}')
+
+        return '\n'.join(docs + [query])
+
+    def generate(self, query: str, relevant_nodes: list[Node]) -> str:
+        try:
+            prompt = self.__prompt(query, relevant_nodes)
+            inputs = self.tokenizer(
+                prompt,
+                truncation=True,
+                max_length=self.max_input,
+                return_tensors="pt"
+            ).to(self.device)
+            input_len = inputs['input_ids'].shape[1]
+            if input_len >= self.max_input:
+                print('WARNING: truncating input!')
+                self.trunc_inputs += 1
+            
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=self.max_gen,
+                stop_strings=['\n#', 'def '],
+                tokenizer=self.tokenizer,
+            )
+            output_len = outputs.shape[1]
+            if (output_len - input_len) >= self.max_gen:
+                print('WARNING: truncating generation!')
+                self.trunc_gens += 1
+            
+            generation = self.tokenizer.decode(outputs[0])
+            completion = self.__align(generation, query=query)
+    
+            return completion
+        except torch.OutOfMemoryError:
+            msg = f"OutOfMemoryError with {len(inputs['input_ids'][0])} input tokens"
+            print(f"WARNING: {msg}!")
+            return f"raise NotImplementedError('{msg}')"
+        finally:
+            print(f'trunc_inputs:', self.trunc_inputs)
+            print(f'trunc_gens  :', self.trunc_gens)
+
+
+class DeepseekGreedyGeneratorConfig(AugmentedGeneratorConfig):
+    type: Literal["hugging_face"] = "deepseek_greedy"
+    model_path: str
+
+    def create(self) -> DeepseekGreedyGenerator:
+        return DeepseekGreedyGenerator(
+            model_path=self.model_path,
         )

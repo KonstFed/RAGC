@@ -62,7 +62,7 @@ def generate_completions(
             json_line = json.dumps(result)
             f.write(json_line + "\n")
 
-        result["completion"] = clean_single(result["completion"])
+        # result["completion"] = clean_single(result["completion"])
 
         with open(output_path, "a") as f:
             json_line = json.dumps(result)

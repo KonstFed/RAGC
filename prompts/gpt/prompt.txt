@@ -1,0 +1,6 @@
+## Context
+
+{context}
+END OF CONTEXT
+
+{query}

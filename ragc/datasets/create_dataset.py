@@ -10,6 +10,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--evocodebench", type=Path, required=False, help="Path to evocodebench repos")
     parser.add_argument("config", type=Path, help="Path to dataset config")
+
     args = parser.parse_args()
     config: TorchGraphDatasetConfig = load_config(TorchGraphDatasetConfig, args.config)
 
@@ -20,3 +21,4 @@ if __name__ == "__main__":
                 config.add_repo(repo_p.absolute())
 
     config.create()
+    print("CREATED TORCH GEOMETRIC DATASET")

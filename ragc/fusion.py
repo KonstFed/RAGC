@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from ragc.graphs.common import Node
-from ragc.llm import BaseGenerator, GeneratorConfig
+from ragc.llm import BaseGenerator, GeneratorConfig, AugmentedGenerator
 from ragc.prompt import PromptConfig, PromptTemplate
 
 
@@ -27,6 +27,19 @@ class PromptFusion(BaseFusion):
             "answer": answer,
             "prompt": prompt,
         }
+
+
+class PromptAugmentation(BaseFusion):
+    def __init__(self, generator: AugmentedGenerator):
+        self.generator = generator
+
+    def fuse_and_generate(self, query: str, relevant_nodes: list[Node]) -> str:
+        answer = self.generator.generate(query, relevant_nodes)
+        return {
+            "answer": answer,
+            "prompt": None,
+        }
+
 
 class BaseFusionConfig(ABC, BaseModel):
     model_config = ConfigDict(
@@ -51,4 +64,15 @@ class PromptFusionConfig(BaseFusionConfig):
         )
 
 
-FusionConfig = PromptFusionConfig
+class PromptAugmentationConfig(BaseFusionConfig):
+    type: Literal["augmentation"] = "augmentation"
+    generator: GeneratorConfig
+
+    def create(self) -> PromptFusion:
+        return PromptAugmentation(
+            generator=self.generator.create(),
+        )
+
+
+# FusionConfig = PromptFusionConfig
+FusionConfig = PromptAugmentationConfig

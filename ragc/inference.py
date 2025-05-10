@@ -77,6 +77,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("-r", "--repo_path", type=Path, help="Path to repo to question", required=True)
     arg_parser.add_argument("query", type=str, help="Your query")
     args = arg_parser.parse_args()
+    assert False, args.query
     cfg: InferenceConfig = load_config(InferenceConfig, args.config)
     inference = cfg.create()
     inference(args.query, repo_path=args.repo_path.absolute().resolve())

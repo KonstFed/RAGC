@@ -1,5 +1,5 @@
-from ragc.llm.huggingface import HuggingFaceEmbedderConfig, HuggingFaceGeneratorConfig
-from ragc.llm.ollama import OllamaEmbedderConfig, OllamaGeneratorConfig
+from ragc.llm.huggingface import HuggingFaceEmbedderConfig, DeepseekGreedyGeneratorConfig
+from ragc.llm.ollama import OllamaEmbedderConfig
 
 EmbedderConfig = OllamaEmbedderConfig | HuggingFaceEmbedderConfig
-GeneratorConfig = OllamaGeneratorConfig | HuggingFaceGeneratorConfig
+GeneratorConfig = DeepseekGreedyGeneratorConfig

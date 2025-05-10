@@ -35,6 +35,8 @@ pcst-fast = "^1.0.10"
 transformers = "^4.50.1"
 black = "^25.1.0"
 accelerate = ">=0.26.0"
+scikit-learn = "^1.6.1"
+bitsandbytes = "^0.45.5"
 
 [tool.ruff]  # Configuration for Ruff
 
