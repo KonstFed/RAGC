@@ -1,4 +1,4 @@
-from typing import Literal, Any
+from typing import Literal, Any, Dict
 
 from pydantic import Field
 import torch
@@ -122,8 +122,14 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
-    def __init__(self, model_path: str):
+class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
+    def __init__(
+        self,
+        model_path: str,
+        max_input: int,
+        max_gen: int,
+        generation_args: Dict[str, Any],
+    ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -138,8 +144,11 @@ class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
         )
 
         # truncation settings
-        self.max_input = 16 * 1024
-        self.max_gen = 8 * 1024
+        self.max_input = max_input
+        self.max_gen = max_gen
+
+        # generation arguments
+        self.generation_args = generation_args
 
         # debug variable
         self.trunc_inputs = 0
@@ -156,7 +165,7 @@ class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
         # remove signatures
         lines = generation.split('\n')
         start_ix = 0
-        while start_ix < len(lines) - 1 and not lines[start_ix].startswith('def '):
+        while start_ix < len(lines) - 1 and not lines[start_ix].strip().endswith(':'):
             start_ix += 1
     
         # dedent
@@ -183,6 +192,7 @@ class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
 
     def generate(self, query: str, relevant_nodes: list[Node]) -> str:
         try:
+            # encode prompt
             prompt = self.__prompt(query, relevant_nodes)
             inputs = self.tokenizer(
                 prompt,
@@ -190,22 +200,29 @@ class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
                 max_length=self.max_input,
                 return_tensors="pt"
             ).to(self.device)
+
+            # debug info
             input_len = inputs['input_ids'].shape[1]
             if input_len >= self.max_input:
                 print('WARNING: truncating input!')
                 self.trunc_inputs += 1
-            
+
+            # generation
             outputs = self.model.generate(
                 **inputs,
+                tokenizer=self.tokenizer,
                 max_new_tokens=self.max_gen,
                 stop_strings=['\n#', 'def '],
-                tokenizer=self.tokenizer,
+                **self.generation_args,
             )
+
+            # debug info
             output_len = outputs.shape[1]
             if (output_len - input_len) >= self.max_gen:
                 print('WARNING: truncating generation!')
                 self.trunc_gens += 1
-            
+
+            # decoding and alignment
             generation = self.tokenizer.decode(outputs[0])
             completion = self.__align(generation, query=query)
     
@@ -219,11 +236,17 @@ class DeepseekGreedyGenerator(AugmentedGenerator, metaclass=Singleton):
             print(f'trunc_gens  :', self.trunc_gens)
 
 
-class DeepseekGreedyGeneratorConfig(AugmentedGeneratorConfig):
-    type: Literal["hugging_face"] = "deepseek_greedy"
+class CompletionGeneratorConfig(AugmentedGeneratorConfig):
+    type: Literal["completion"] = "completion"
     model_path: str
+    max_input: int = 16_354
+    max_gen: int = 4096
+    generation_args: Dict[str, Any] = {}
 
-    def create(self) -> DeepseekGreedyGenerator:
-        return DeepseekGreedyGenerator(
+    def create(self) -> CompletionGenerator:
+        return CompletionGenerator(
             model_path=self.model_path,
+            max_input=self.max_input,
+            max_gen=self.max_gen,
+            generation_args=self.generation_args,
         )

@@ -28,5 +28,4 @@ dataset:
   transform: null
 task_path: data/evocodebench/oracle.jsonl
 repos_path: data/evocodebench/repos/Source_Code
-only_with_cross_file: true
-use_gold_context: true
+only_with_cross_file: false
