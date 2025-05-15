@@ -29,3 +29,4 @@ dataset:
 task_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/data/oracle.jsonl
 repos_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/repos
 only_with_cross_file: false
+use_gold_context: true

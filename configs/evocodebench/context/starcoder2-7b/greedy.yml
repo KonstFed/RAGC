@@ -14,7 +14,7 @@ inference:
     type: augmentation
     generator:
       type: completion
-      model_path: /home/jovyan/work/diplom/RAGC/models/deepseek-coder-6.7b-base
+      model_path: /home/jovyan/work/diplom/RAGC/models/starcoder2-7b
       max_input: 16354
       max_gen: 4096
       generation_args:
@@ -29,3 +29,4 @@ dataset:
 task_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/data/oracle.jsonl
 repos_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/repos
 only_with_cross_file: false
+use_gold_context: true
