@@ -98,7 +98,7 @@ class HeteroGraphSAGE(torch.nn.Module):
         projected = F.normalize(projected, dim=0)
         node_embeddings = F.normalize(node_embeddings, dim=1)
         cos_sim = torch.matmul(projected, node_embeddings.T)
-        _values, indices = cos_sim.topk(k=k)
+        _values, indices = cos_sim.topk(k=min(k, node_embeddings.shape[0]))
         return indices
 
     def retrieve(
