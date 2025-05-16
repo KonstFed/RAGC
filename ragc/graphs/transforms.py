@@ -35,9 +35,20 @@ class ToPYG(BaseTransform, BaseTransformConfig):
 class EmbedTransform(BaseTransform):
     """Embeddes all nodes except Files."""
 
-    def __init__(self, embedder: BaseEmbedder):
+    def __init__(self, embedder: BaseEmbedder, embed_docstring:bool):
         self.embedder = embedder
+        self.embed_docstring = embed_docstring
         super().__init__()
+
+    def emb_docstring(self, data: Data) -> Data:
+        # this mask state which nodes had meaningful doctring
+        mask = [i for i, d in enumerate(data.docstring) if len(d) != 0]
+
+        docstrings = [d for d in data.docstring if len(d) != 0]
+        embeddings = self.embedder.embed(docstrings).cpu()
+        data.docstring_embeddings = embeddings
+        data.docstring_mask = mask
+        return data
 
     def forward(self, data: Data) -> Data:
         data_c = copy.copy(data)
@@ -50,6 +61,9 @@ class EmbedTransform(BaseTransform):
         node_embeddings[not_file_mask] = embeddings
 
         data_c.x = node_embeddings
+
+        if self.embed_docstring:
+            data_c = self.emb_docstring(data_c)
         return data_c
 
 
@@ -57,9 +71,12 @@ class EmbedTransformConfig(BaseTransformConfig):
     type: Literal["embed_transform"] = "embed_transform"
     embedder: EmbedderConfig
 
+    embed_docstring: bool
+
     def create(self) -> EmbedTransform:
         embedder = self.embedder.create()
         return EmbedTransform(embedder=embedder)
+
 
 
 class MaskNodes(BaseTransform):
