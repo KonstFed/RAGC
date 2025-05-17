@@ -43,11 +43,13 @@ class EmbedTransform(BaseTransform):
     def emb_docstring(self, data: Data) -> Data:
         # this mask state which nodes had meaningful doctring
         mask = [i for i, d in enumerate(data.docstring) if len(d) != 0]
+        data.docstring_mask = mask
 
         docstrings = [d for d in data.docstring if len(d) != 0]
+        if len(docstrings) == 0:
+            return data
         embeddings = self.embedder.embed(docstrings).cpu()
         data.docstring_embeddings = embeddings
-        data.docstring_mask = mask
         return data
 
     def forward(self, data: Data) -> Data:
@@ -75,7 +77,7 @@ class EmbedTransformConfig(BaseTransformConfig):
 
     def create(self) -> EmbedTransform:
         embedder = self.embedder.create()
-        return EmbedTransform(embedder=embedder)
+        return EmbedTransform(embedder=embedder, embed_docstring=self.embed_docstring)
 
 
 
