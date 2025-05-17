@@ -43,13 +43,19 @@ class EmbedTransform(BaseTransform):
     def emb_docstring(self, data: Data) -> Data:
         # this mask state which nodes had meaningful doctring
         mask = [i for i, d in enumerate(data.docstring) if len(d) != 0]
-        data.docstring_mask = mask
+        data.docstring_mask = torch.tensor(mask, dtype=torch.int64)
 
+        # костыль чтобы знать размер эмбэдинга
+        t = self.embedder.embed(["aaaa"])[0]
+
+        docstring_embeddings = torch.zeros((data.num_nodes, t.shape[0]))
         docstrings = [d for d in data.docstring if len(d) != 0]
-        if len(docstrings) == 0:
-            return data
-        embeddings = self.embedder.embed(docstrings).cpu()
-        data.docstring_embeddings = embeddings
+        if len(docstrings) != 0:
+            embeddings = self.embedder.embed(docstrings).cpu()
+            for i, g_i in enumerate(mask):
+                docstring_embeddings[g_i] = embeddings[i]
+
+        data.docstring_embeddings = docstring_embeddings
         return data
 
     def forward(self, data: Data) -> Data:
@@ -67,7 +73,6 @@ class EmbedTransform(BaseTransform):
         if self.embed_docstring:
             data_c = self.emb_docstring(data_c)
         return data_c
-
 
 class EmbedTransformConfig(BaseTransformConfig):
     type: Literal["embed_transform"] = "embed_transform"
