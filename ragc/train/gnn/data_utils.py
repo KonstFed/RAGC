@@ -152,6 +152,14 @@ def unbatch_with_positives(batch: Batch) -> list[HeteroData]:
 
 def collate_for_validation(batch: list[HeteroData]) -> Batch:
     """Collate hetero graphs with sampled pairs for validation."""
+    new_batch = []
+    for blist in batch:
+        if isinstance(blist, list):
+            new_batch.extend(blist)
+        else:
+            new_batch.append(blist)
+    batch = new_batch
+
     batch = [b for b in batch if b.pairs.shape[1] != 0]
     pairs = [b.pairs for b in batch]
     init_embs = [b.init_embs for b in batch]

@@ -1,3 +1,4 @@
+from pathlib import Path
 from copy import copy, deepcopy
 
 import torch
@@ -18,17 +19,34 @@ from ragc.train.gnn.data_utils import (
     collate_with_positives,
 )
 from ragc.train.gnn.models.hetero_graphsage import HeteroGraphSAGE
-from ragc.train.gnn.train_transforms import InverseEdges, SampleCallPairsSubgraph, SamplePairs, PositiveSampler, HardSampler
-from ragc.train.gnn.losses import TripletLoss
+from ragc.train.gnn.train_transforms import (
+    InverseEdges,
+    SampleCallPairsSubgraph,
+    SamplePairs,
+    PositiveSampler,
+    HardSampler,
+    SampleDocstringPairsSubgraph,
+)
+from ragc.train.gnn.losses import TripletLoss, SimpleClassificationLoss
 
 
 class Trainer:
     def __init__(
-        self, dataset: TorchGraphDataset, model: HeteroGraphSAGE, loss_fn, optimizer, batch_size: int, retrieve_k: int
+        self,
+        dataset: TorchGraphDataset,
+        model: HeteroGraphSAGE,
+        loss_fn,
+        optimizer,
+        batch_size: int,
+        retrieve_k: int,
+        checkpoint_save_path: Path,
+        docstring: bool = False,
     ):
         self.model = model
         self.loss_fn = loss_fn
         self.retrieve_k = retrieve_k
+        self.docstring = docstring
+        self.checkpoint_save_path = checkpoint_save_path
 
         self.optimizer = optimizer
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -40,7 +58,13 @@ class Trainer:
                 RemoveExcessInfo(),
                 DropIsolated("FILE"),
                 InitFileEmbeddings(),
-                SamplePairs([("FUNCTION", "CALL", "FUNCTION"), ("CLASS", "OWNER", "FUNCTION")], 0.2, 10, 100),
+                SamplePairs(
+                    [("FUNCTION", "CALL", "FUNCTION"), ("CLASS", "OWNER", "FUNCTION")],
+                    0.2,
+                    10,
+                    100,
+                    use_docstring=self.docstring,
+                ),
                 InverseEdges(rev_suffix=""),
             ],
         )
@@ -60,7 +84,7 @@ class Trainer:
             [
                 ToHetero(),
                 RemoveExcessInfo(),
-                SampleCallPairsSubgraph(),
+                SampleDocstringPairsSubgraph() if docstring else SampleCallPairsSubgraph(),
                 DropIsolated("FILE"),
                 InitFileEmbeddings(),
                 InverseEdges(rev_suffix=""),
@@ -113,7 +137,7 @@ class Trainer:
             if len(anchor_idx) == 0:
                 return None
 
-            anchor_embs = batch[src].x[anchor_idx]
+            anchor_embs = batch[src].query_emb[anchor_idx]
             cur_projector = self.model.proj_map[link_type]
             anchor_embs = cur_projector(anchor_embs)
 
@@ -187,8 +211,6 @@ class Trainer:
             avg_loss = sum(losses) / len(losses)
             bar.set_description(f"avg loss: {avg_loss}; loss: {loss}")
 
-
-
     ###----Validation functions below----###
 
     def classification_metrics(
@@ -207,7 +229,7 @@ class Trainer:
 
             # get embeddings
             anchor_idx = pos_idx[0, :]
-            anchor_embs = batch[src].x[anchor_idx]
+            anchor_embs = batch[src].query_emb[anchor_idx]
             cur_projector = self.model.proj_map[link_type]
             anchor_embs = cur_projector(anchor_embs)
 
@@ -286,29 +308,36 @@ class Trainer:
                 node_embeddings = self.model(batched_graph.x_dict, batched_graph.edge_index_dict)
                 # nodes for which we want to predict
 
-                og_embs = batched_graph.init_embs
+                query_embs = batched_graph.init_embs
+                # node2query_map = -1 * torch.ones(batched_graph["FUNCTION"].num_nodes, dtype=torch.long)
+                # node2query_map[batched_graph["FUNCTION"].docstring_mask] = torch.arange(end=query_embs.shape[0], dtype=torch.long)
+
                 pred_relevant = self.model.retrieve(
                     batched_graph,
                     node_embeddings["FUNCTION"],
-                    og_embs,
-                    batched_graph.init_embs_ptr,
+                    query_embs,
+                    batched_graph["FUNCTION"].ptr,
                     k=k,
                 )
 
                 # get actual relevant nodes
-                c_actual = [[] for _ in range(len(og_embs))]
-                c_predicted = [[] for _ in range(len(og_embs))]
+                c_actual = [[] for _ in range(len(query_embs))]
+                # c_predicted = [[] for _ in range(len(query_embs))]
                 for n, relevant_f in batched_graph.pairs.T:
+                    # idx = node2query_map[n]
+                    # if idx == -1:
+                    #     raise ValueError
                     c_actual[n].append(int(relevant_f))
-                    c_predicted[n] = pred_relevant[n]
+                    # c_predicted[n] = pred_relevant[n]
 
                 actual.extend(c_actual)
-                predicted.extend(c_predicted)
+                predicted.extend(pred_relevant)
 
         assert len(actual) == len(predicted)
 
         recalls = []
         precisions = []
+        reciprocal_ranks = []
         for actual_nodes, pred_nodes in zip(actual, predicted, strict=True):
             tp = len(set(actual_nodes).intersection(pred_nodes))
             recall = tp / len(actual_nodes)
@@ -316,13 +345,26 @@ class Trainer:
             recalls.append(recall)
             precisions.append(precision)
 
+            for rank, node in enumerate(pred_nodes, 1):
+                if node in actual_nodes:
+                    reciprocal_ranks.append(1 / rank)
+                    break
+            else:
+                # If none of the predicted nodes are in actual nodes, append 0
+                reciprocal_ranks.append(0)
         return {
             "recall": sum(recalls) / len(recalls),
             "precision": sum(precisions) / len(precisions),
+            "mrr": sum(reciprocal_ranks) / len(reciprocal_ranks),
         }
 
-    def train(self):
-        for epoch in range(100):
+    def train(self, n_epoch: int, n_early_stop: int = -1):
+        if n_early_stop == -1:
+            n_early_stop = n_epoch
+
+        cnt = 0
+        best_metric = 0
+        for epoch in range(n_epoch):
             print(f"--------Epoch {epoch}-------")
             print("Training")
             self.train_epoch()
@@ -335,15 +377,29 @@ class Trainer:
             retrieval_metrics = self.validate_retrieval_epoch(self.val_loader, k=self.retrieve_k)
             print(retrieval_metrics)
 
-            torch.save(self.model, "LAST_CHECKPOINT.pt")
+            if retrieval_metrics["recall"] > best_metric:
+                torch.save(self.model, self.checkpoint_save_path / "BEST_CHECKPOINT.pt")
+                best_metric = retrieval_metrics["recall"]
+                cnt = 0
+            else:
+                cnt += 1
 
+            print(f"Early stopping counter {cnt}/{n_early_stop}")
+
+            if cnt >= n_early_stop:
+                print("Early stopping")
+                break
+
+            torch.save(self.model, self.checkpoint_save_path / "LAST_CHECKPOINT.pt")
 
 
 def train():
     ds = TorchGraphDataset(
         root="data/torch_cache/repobench",
     )
-
+    print(len(ds))
+    SAVE_PATH = Path("data/gnn_weights/pretrain")
+    SAVE_PATH.mkdir(exist_ok=True, parents=True)
     triplet_loss = TripletLoss(
         margin=1.0,
         p=2,
@@ -351,13 +407,53 @@ def train():
         reduction="mean",
     )
 
-    model = HeteroGraphSAGE(768, 768, 768, 3)
+    model = HeteroGraphSAGE(768, 768, 768, 2)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    trainer = Trainer(model=model, loss_fn=triplet_loss, dataset=ds, batch_size=52, optimizer=optimizer, retrieve_k=5)
-    trainer.train()
+    trainer = Trainer(
+        model=model,
+        loss_fn=triplet_loss,
+        dataset=ds,
+        batch_size=52,
+        optimizer=optimizer,
+        retrieve_k=10,
+        checkpoint_save_path=SAVE_PATH,
+    )
+    trainer.train(100)
+
+
+def finetune():
+    # finetune on docstring only
+    model_path = "LAST_CHECKPOINT.pt"
+    ds = TorchGraphDataset(
+        root="data/torch_cache/repobench",
+    )
+    SAVE_PATH = Path("data/gnn_weights/finetune")
+    SAVE_PATH.mkdir(exist_ok=True, parents=True)
+    print(len(ds))
+
+    loss = SimpleClassificationLoss({})
+
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+    model: HeteroGraphSAGE = torch.load(model_path, weights_only=False, map_location=device)
+    model.freeze_gnn()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+    trainer = Trainer(
+        model=model,
+        loss_fn=loss,
+        dataset=ds,
+        batch_size=52,
+        optimizer=optimizer,
+        retrieve_k=10,
+        docstring=True,
+        checkpoint_save_path=SAVE_PATH,
+    )
+    trainer.train(20)
 
 
 if __name__ == "__main__":
     torch.manual_seed(0)
-    train()
+    # train()
+    finetune()

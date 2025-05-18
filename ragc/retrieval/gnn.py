@@ -23,7 +23,7 @@ class Singleton(type):
 
 class TorchModel(metaclass=Singleton):
     def __init__(self, model_path: Path):
-        self.model: HeteroGraphSAGE = torch.load(model_path, weights_only=False)
+        self.model: HeteroGraphSAGE = torch.load(model_path, weights_only=False, map_location=torch.device("cpu"))
 
     def get_node_embeddings(self, graph: HeteroData) -> dict[str, torch.Tensor]:
         return self.model.forward(graph.x_dict, graph.edge_index_dict)

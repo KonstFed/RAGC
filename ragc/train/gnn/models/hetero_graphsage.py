@@ -9,6 +9,12 @@ from torch_geometric.data import Batch, HeteroData
 class HeteroGraphSAGE(torch.nn.Module):
     """Directed graphsage."""
 
+    def freeze_gnn(self) -> None:
+        """Freeze all GNN related weights."""
+        for conv in self.convs:
+            for param in conv.parameters():
+                param.requires_grad = False
+
     def __init__(self, orig_emb_size: int, hidden_dim: int, out_channels: int, num_layers: int):
         super().__init__()
         self.convs = torch.nn.ModuleList()
