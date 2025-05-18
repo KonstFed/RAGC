@@ -155,6 +155,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         self.trunc_gens = 0
 
     def __align(self, generation: str, query: str) -> str:
+        # --- find start_ix ---
         # try to find required namespace completion
         namespace_comm = query.split('\n')[0].strip()
         try:
@@ -162,19 +163,19 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         except ValueError:
             print('WARNING: Alignment failed - completion not found!')
         
-        # remove signatures
+        # remove signature
         lines = generation.split('\n')
         start_ix = 0
         while start_ix < len(lines) - 1 and not lines[start_ix].strip().endswith(':'):
             start_ix += 1
     
-        # dedent
-        end_ix = len(lines) - 1
-        while end_ix >= 0 and not lines[end_ix].startswith('    '):
-            end_ix -= 1
+        # --- find end_ix by searching zero indent ---
+        end_ix = start_ix + 1
+        while end_ix < len(lines) and (lines[end_ix] == '' or lines[end_ix].startswith(' ')):
+            end_ix += 1
     
         # strip end tokens
-        completion = '\n'.join(lines[start_ix + 1:end_ix + 1])\
+        completion = '\n'.join(lines[start_ix + 1:end_ix])\
             .strip('\n')\
             .strip('<｜end▁of▁sentence｜>')
         
@@ -212,7 +213,9 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
                 **inputs,
                 tokenizer=self.tokenizer,
                 max_new_tokens=self.max_gen,
-                stop_strings=['\n#', 'def '],
+                stop_strings=[f'\n{chr(i)}' for i in range(ord('!'), ord('~') + 1)],
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
                 **self.generation_args,
             )
 
@@ -225,7 +228,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
             # decoding and alignment
             generation = self.tokenizer.decode(outputs[0])
             completion = self.__align(generation, query=query)
-    
+
             return completion
         except torch.OutOfMemoryError:
             msg = f"OutOfMemoryError with {len(inputs['input_ids'][0])} input tokens"
