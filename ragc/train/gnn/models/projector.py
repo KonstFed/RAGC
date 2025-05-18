@@ -6,12 +6,15 @@ class Projector(nn.Module):
 
     def __init__(self, orig_emb_size: int, node_emb_size: int):
         super().__init__()
-        _relu = nn.ReLU()
         self.compose = nn.Sequential(
             nn.Linear(orig_emb_size, 1024),
-            _relu,
-            nn.Linear(1024, 768),
-            _relu,
+            nn.ReLU(),
+            nn.Linear(1024, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 768),
+            nn.ReLU(),
             nn.Linear(768, node_emb_size),
         )
 

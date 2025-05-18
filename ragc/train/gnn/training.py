@@ -19,6 +19,7 @@ from ragc.train.gnn.data_utils import (
     collate_with_positives,
 )
 from ragc.train.gnn.models.hetero_graphsage import HeteroGraphSAGE
+from ragc.train.gnn.models.gat import HeteroGAT
 from ragc.train.gnn.train_transforms import (
     InverseEdges,
     SampleCallPairsSubgraph,
@@ -393,13 +394,13 @@ class Trainer:
             torch.save(self.model, self.checkpoint_save_path / "LAST_CHECKPOINT.pt")
 
 
-def train():
+def train(dataset_path: Path, checkpoint_path: Path):
     ds = TorchGraphDataset(
-        root="data/torch_cache/repobench",
+        root=dataset_path,
     )
-    print(len(ds))
-    SAVE_PATH = Path("data/gnn_weights/pretrain")
-    SAVE_PATH.mkdir(exist_ok=True, parents=True)
+
+    checkpoint_path = checkpoint_path / "pretrain"
+    checkpoint_path.mkdir(exist_ok=True, parents=True)
     triplet_loss = TripletLoss(
         margin=1.0,
         p=2,
@@ -407,7 +408,8 @@ def train():
         reduction="mean",
     )
 
-    model = HeteroGraphSAGE(768, 768, 768, 6)
+    # model = HeteroGraphSAGE(768, 768, 768, 4)
+    model = HeteroGAT(768, 1024, 1024, 5, heads=6)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     trainer = Trainer(
@@ -417,33 +419,34 @@ def train():
         batch_size=52,
         optimizer=optimizer,
         retrieve_k=10,
-        checkpoint_save_path=SAVE_PATH,
+        checkpoint_save_path=checkpoint_path,
     )
     trainer.train(400, n_early_stop=10)
 
 
-def finetune():
+def finetune(dataset_path: Path, checkpoint_path: Path):
     # finetune on docstring only
     ds = TorchGraphDataset(
-        root="data/torch_cache/repobench",
+        root=dataset_path,
     )
-    SAVE_PATH = Path("data/gnn_weights/finetune")
-    SAVE_PATH.mkdir(exist_ok=True, parents=True)
+    model_path = checkpoint_path / "pretrain" / "BEST_CHECKPOINT.pt"
+
+    checkpoint_path = checkpoint_path / "finetuned"
+    checkpoint_path.mkdir(exist_ok=True, parents=True)
     print(len(ds))
 
     loss = SimpleClassificationLoss({})
-    loss = TripletLoss(
-        margin=1.0,
-        p=2,
-        swap=False,
-        reduction="mean",
-    )
+    # loss = TripletLoss(
+    #     margin=1.0,
+    #     p=2,
+    #     swap=False,
+    #     reduction="mean",
+    # )
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    model_path = SAVE_PATH.parent / "pretrain/BEST_CHECKPOINT.pt"
     model: HeteroGraphSAGE = torch.load(model_path, weights_only=False, map_location=device)
     model.freeze_gnn()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     trainer = Trainer(
         model=model,
@@ -453,12 +456,16 @@ def finetune():
         optimizer=optimizer,
         retrieve_k=10,
         docstring=True,
-        checkpoint_save_path=SAVE_PATH,
+        checkpoint_save_path=checkpoint_path,
     )
     trainer.train(20, n_early_stop=10)
 
 
 if __name__ == "__main__":
     torch.manual_seed(0)
-    #train()
-    finetune()
+    dataset_path = Path("data/torch_cache/repobench")
+    save_path = Path("data/gnn_weights/graphsage")
+    save_path.mkdir(exist_ok=True, parents=True)
+
+    train(dataset_path, save_path)
+    finetune(dataset_path, save_path)
