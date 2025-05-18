@@ -166,7 +166,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         # remove signature
         lines = generation.split('\n')
         start_ix = 0
-        while start_ix < len(lines) - 1 and not lines[start_ix].strip().endswith(':'):
+        while start_ix < len(lines) - 1 and not lines[start_ix].startswith('    '):
             start_ix += 1
     
         # --- find end_ix by searching zero indent ---
@@ -175,9 +175,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
             end_ix += 1
     
         # strip end tokens
-        completion = '\n'.join(lines[start_ix + 1:end_ix])\
-            .strip('\n')\
-            .strip('<｜end▁of▁sentence｜>')
+        completion = '\n'.join(lines[start_ix:end_ix]).strip('\n')
         
         return completion
 
@@ -195,6 +193,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         try:
             # encode prompt
             prompt = self.__prompt(query, relevant_nodes)
+            # print(prompt)
             inputs = self.tokenizer(
                 prompt,
                 truncation=True,
