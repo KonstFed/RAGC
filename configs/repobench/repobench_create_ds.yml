@@ -1,0 +1,10 @@
+root_path: data/torch_cache/repobench
+graphs_path: data/repobench/parsed_graphs
+pre_transform:
+- type: to_pyg
+- type: embed_transform
+  embedder:
+    model_name: microsoft/unixcoder-base
+    max_batch_size: 256
+    max_length: 1024
+    store_in_gpu: true

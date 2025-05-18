@@ -1,6 +1,7 @@
 import warnings
+import os
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Iterator, Literal, Dict, Union, Any
 
 import pandas as pd
 from pydantic import BaseModel
@@ -15,7 +16,23 @@ from ragc.inference import InferenceConfig
 from ragc.test.utils import extract_signature, map_cross_file_dependency
 
 
-def build_prompt(
+def completion_prompt(
+    completion_path: str,
+    signature: str,
+    requirement: Dict[str, str],
+) -> str:
+    req_args = requirement['Arguments'].replace('\n', '\n    ')
+    prompt = f"""#{completion_path}
+{signature}
+    \"\"\"{requirement['Functionality']}
+
+    {req_args}
+    \"\"\""""
+
+    return prompt
+
+
+def gpt_prompt(
     completion_path: str,
     namespace: str,
     signature: str,
@@ -48,6 +65,13 @@ Disregard irrelevant or conflicting information.
 
 Your code here:\n"""
     return prompt
+
+
+def build_prompt(task: Dict[str, Any], repos_path: Union[str, os.PathLike]) -> str:
+    signature = extract_signature(repos_path / task["completion_path"], task["signature_position"])
+    rel_path = task['completion_path'].replace(task['project_path'], '', 1).strip('/')
+    return completion_prompt(rel_path, signature, task['requirement'])
+
 
 def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> dict:
     """Transform namespace of evocodebench into graph namespace."""
@@ -154,16 +178,12 @@ class TestInference:
         """Pipeline for evocodebench generation."""
         bar = tqdm(self.tasks.iterrows(), total=len(self.tasks)) if progress_bar else self.tasks.iterrows()
         for _, task in bar:
-            task_path = self.repos_path / task["completion_path"]
             namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
             repo_name = Path(task["project_path"]).parts[-1]
 
             prompt = build_prompt(
-                completion_path=task["completion_path"],
-                namespace=task["namespace"],
-                signature=extract_signature(task_path, task["signature_position"]),
-                requirement=task["requirement"],
-                completion_type=task["type"],
+                task=task,
+                repos_path=self.repos_path,
             )
             if not self.use_gold_context:
                 generation, _meta = self(
@@ -208,7 +228,6 @@ class TestInference:
         bar = tqdm(self.tasks.iterrows(), total=len(self.tasks)) if progress_bar else self.tasks.iterrows()
         for _, task in bar:
             repo_name = Path(task["project_path"]).parts[-1]
-            task_path = self.repos_path / task["completion_path"]
             namespace = _get_correct_namespace(task["completion_path"], task["project_path"], task["namespace"])
 
             graph = self._prepare_graph(repo_name=repo_name, node_namespace=namespace)
@@ -220,11 +239,8 @@ class TestInference:
                 continue
 
             prompt = build_prompt(
-                completion_path=task["completion_path"],
-                namespace=task["namespace"],
-                signature=extract_signature(task_path, task["signature_position"]),
-                requirement=task["requirement"],
-                completion_type=task["type"],
+                task=task,
+                repos_path=self.repos_path,
             )
             retrieved_nodes = self.retrieve(
                 repo_name=Path(task["project_path"]).parts[-1],

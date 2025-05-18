@@ -1,11 +1,12 @@
-from typing import Literal, Any
+from typing import Literal, Any, Dict
 
 from pydantic import Field
 import torch
-from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+from ragc.graphs.common import Node
 from ragc.llm.embedding import BaseEmbedder, BaseEmbederConfig
-from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig
+from ragc.llm.generator import BaseGenerator, BaseGeneratorConfig, AugmentedGenerator, AugmentedGeneratorConfig
 
 
 class HuggingFaceEmbedder(BaseEmbedder):
@@ -110,4 +111,145 @@ class HuggingFaceGeneratorConfig(BaseGeneratorConfig):
             model=self.model,
             tokenizer_kwargs=self.tokenizer_kwargs,
             generation_kwargs=self.generation_kwargs,
+        )
+
+
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
+    def __init__(
+        self,
+        model_path: str,
+        max_input: int,
+        max_gen: int,
+        generation_args: Dict[str, Any],
+    ):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            truncation_side='left'
+        )
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            # torch_dtype=torch.bfloat16,
+            quantization_config=quantization_config,
+            device_map=self.device,
+        )
+
+        # truncation settings
+        self.max_input = max_input
+        self.max_gen = max_gen
+
+        # generation arguments
+        self.generation_args = generation_args
+
+        # debug variable
+        self.trunc_inputs = 0
+        self.trunc_gens = 0
+
+    def __align(self, generation: str, query: str) -> str:
+        # --- find start_ix ---
+        # try to find required namespace completion
+        namespace_comm = query.split('\n')[0].strip()
+        try:
+            generation = generation[generation.index(namespace_comm):]
+        except ValueError:
+            print('WARNING: Alignment failed - completion not found!')
+        
+        # remove signature
+        lines = generation.split('\n')
+        start_ix = 0
+        while start_ix < len(lines) - 1 and not lines[start_ix].strip().endswith(':'):
+            start_ix += 1
+    
+        # --- find end_ix by searching zero indent ---
+        end_ix = start_ix + 1
+        while end_ix < len(lines) and (lines[end_ix] == '' or lines[end_ix].startswith(' ')):
+            end_ix += 1
+    
+        # strip end tokens
+        completion = '\n'.join(lines[start_ix + 1:end_ix])\
+            .strip('\n')\
+            .strip('<｜end▁of▁sentence｜>')
+        
+        return completion
+
+    def __prompt(self, query: str, relevant_nodes: list[Node]) -> str:
+        # sort by length
+        relevant_nodes = sorted(relevant_nodes, key=lambda x: -len(x.code))
+        
+        docs = []
+        for node in relevant_nodes:
+            docs.append(f'#{node.file_path}\n{node.code}')
+
+        return '\n'.join(docs + [query])
+
+    def generate(self, query: str, relevant_nodes: list[Node]) -> str:
+        try:
+            # encode prompt
+            prompt = self.__prompt(query, relevant_nodes)
+            inputs = self.tokenizer(
+                prompt,
+                truncation=True,
+                max_length=self.max_input,
+                return_tensors="pt"
+            ).to(self.device)
+
+            # debug info
+            input_len = inputs['input_ids'].shape[1]
+            if input_len >= self.max_input:
+                print('WARNING: truncating input!')
+                self.trunc_inputs += 1
+
+            # generation
+            outputs = self.model.generate(
+                **inputs,
+                tokenizer=self.tokenizer,
+                max_new_tokens=self.max_gen,
+                stop_strings=[f'\n{chr(i)}' for i in range(ord('!'), ord('~') + 1)],
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
+                **self.generation_args,
+            )
+
+            # debug info
+            output_len = outputs.shape[1]
+            if (output_len - input_len) >= self.max_gen:
+                print('WARNING: truncating generation!')
+                self.trunc_gens += 1
+
+            # decoding and alignment
+            generation = self.tokenizer.decode(outputs[0])
+            completion = self.__align(generation, query=query)
+
+            return completion
+        except torch.OutOfMemoryError:
+            msg = f"OutOfMemoryError with {len(inputs['input_ids'][0])} input tokens"
+            print(f"WARNING: {msg}!")
+            return f"raise NotImplementedError('{msg}')"
+        finally:
+            print(f'trunc_inputs:', self.trunc_inputs)
+            print(f'trunc_gens  :', self.trunc_gens)
+
+
+class CompletionGeneratorConfig(AugmentedGeneratorConfig):
+    type: Literal["completion"] = "completion"
+    model_path: str
+    max_input: int = 16_354
+    max_gen: int = 4096
+    generation_args: Dict[str, Any] = {}
+
+    def create(self) -> CompletionGenerator:
+        return CompletionGenerator(
+            model_path=self.model_path,
+            max_input=self.max_input,
+            max_gen=self.max_gen,
+            generation_args=self.generation_args,
         )
