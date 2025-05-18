@@ -408,8 +408,8 @@ def train(dataset_path: Path, checkpoint_path: Path):
         reduction="mean",
     )
 
-    # model = HeteroGraphSAGE(768, 768, 768, 4)
-    model = HeteroGAT(768, 1024, 1024, 5, heads=6)
+    model = HeteroGraphSAGE(768, 768, 768, 3)
+    #model = HeteroGAT(768, 562, 562, 5, heads=4)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     trainer = Trainer(

@@ -9,13 +9,13 @@ class Projector(nn.Module):
         self.compose = nn.Sequential(
             nn.Linear(orig_emb_size, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, 768),
-            nn.ReLU(),
-            nn.Linear(768, node_emb_size),
+            #nn.Linear(1024, 2048),
+            #nn.ReLU(),
+            #nn.Linear(2048, 2048),
+            #nn.ReLU(),
+            #nn.Linear(2048, 768),
+            #nn.ReLU(),
+            nn.Linear(1024, node_emb_size),
         )
 
     def forward(self, og_embeddings: torch.Tensor) -> torch.Tensor:

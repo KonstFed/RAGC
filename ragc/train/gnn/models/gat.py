@@ -56,29 +56,29 @@ class HeteroGAT(torch.nn.Module):
         }
 
     def _init_projectors(self, orig_emb_size: int, node_emb_size: int) -> dict[tuple[str, str, str], torch.nn.Module]:
-        file_own_proj = Projector(orig_emb_size, node_emb_size)
-        file_call_proj = Projector(orig_emb_size, node_emb_size)
-        own_call_proj = Projector(orig_emb_size, node_emb_size)
-        call_proj = Projector(orig_emb_size, node_emb_size)
+        self.file_own_proj = Projector(orig_emb_size, node_emb_size)
+        self.file_call_proj = Projector(orig_emb_size, node_emb_size)
+        self.own_call_proj = Projector(orig_emb_size, node_emb_size)
+        self.call_proj = Projector(orig_emb_size, node_emb_size)
 
         return {
             # file own relations
-            ("FILE", "OWNER", "CLASS"): file_own_proj,
-            ("FILE", "OWNER", "FUNCTION"): file_own_proj,
+            ("FILE", "OWNER", "CLASS"): self.file_own_proj,
+            ("FILE", "OWNER", "FUNCTION"): self.file_own_proj,
             # file calls
-            ("FILE", "CALL", "FUNCTION"): file_call_proj,
-            ("FILE", "IMPORT", "FILE"): file_call_proj,
-            ("FILE", "IMPORT", "CLASS"): file_call_proj,
-            ("FILE", "IMPORT", "FUNCTION"): file_call_proj,
+            ("FILE", "CALL", "FUNCTION"): self.file_call_proj,
+            ("FILE", "IMPORT", "FILE"): self.file_call_proj,
+            ("FILE", "IMPORT", "CLASS"): self.file_call_proj,
+            ("FILE", "IMPORT", "FUNCTION"): self.file_call_proj,
             # own relations
-            ("CLASS", "OWNER", "CLASS"): own_call_proj,
-            ("CLASS", "OWNER", "FUNCTION"): own_call_proj,
-            ("FUNCTION", "OWNER", "CLASS"): own_call_proj,
-            ("FUNCTION", "OWNER", "FUNCTION"): own_call_proj,
+            ("CLASS", "OWNER", "CLASS"): self.own_call_proj,
+            ("CLASS", "OWNER", "FUNCTION"): self.own_call_proj,
+            ("FUNCTION", "OWNER", "CLASS"): self.own_call_proj,
+            ("FUNCTION", "OWNER", "FUNCTION"): self.own_call_proj,
             # call relations
-            ("CLASS", "CALL", "FUNCTION"): call_proj,
-            ("CLASS", "INHERITED", "CLASS"): call_proj,
-            ("FUNCTION", "CALL", "FUNCTION"): call_proj,
+            ("CLASS", "CALL", "FUNCTION"): self.call_proj,
+            ("CLASS", "INHERITED", "CLASS"): self.call_proj,
+            ("FUNCTION", "CALL", "FUNCTION"): self.call_proj,
         }
 
     def forward(self, x_dict: dict[str, torch.Tensor], edge_index_dict: dict[tuple[str, str, str], torch.Tensor]) -> dict[str, torch.Tensor]:
