@@ -407,7 +407,7 @@ def train():
         reduction="mean",
     )
 
-    model = HeteroGraphSAGE(768, 768, 768, 2)
+    model = HeteroGraphSAGE(768, 768, 768, 6)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     trainer = Trainer(
@@ -419,12 +419,11 @@ def train():
         retrieve_k=10,
         checkpoint_save_path=SAVE_PATH,
     )
-    trainer.train(100)
+    trainer.train(400, n_early_stop=10)
 
 
 def finetune():
     # finetune on docstring only
-    model_path = "LAST_CHECKPOINT.pt"
     ds = TorchGraphDataset(
         root="data/torch_cache/repobench",
     )
@@ -433,9 +432,15 @@ def finetune():
     print(len(ds))
 
     loss = SimpleClassificationLoss({})
-
+    loss = TripletLoss(
+        margin=1.0,
+        p=2,
+        swap=False,
+        reduction="mean",
+    )
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+    model_path = SAVE_PATH.parent / "pretrain/BEST_CHECKPOINT.pt"
     model: HeteroGraphSAGE = torch.load(model_path, weights_only=False, map_location=device)
     model.freeze_gnn()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -450,10 +455,10 @@ def finetune():
         docstring=True,
         checkpoint_save_path=SAVE_PATH,
     )
-    trainer.train(20)
+    trainer.train(20, n_early_stop=10)
 
 
 if __name__ == "__main__":
     torch.manual_seed(0)
-    # train()
+    #train()
     finetune()
