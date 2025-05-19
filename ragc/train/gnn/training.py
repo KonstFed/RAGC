@@ -375,7 +375,7 @@ class Trainer:
         for epoch in range(n_epoch):
             print(f"--------Epoch {epoch}-------")
             print("Training")
-            # self.train_epoch()
+            self.train_epoch()
 
             # print("Simple acc metrics")
             # class_metrics = self.validate_epoch(self.val_loader)
@@ -447,7 +447,6 @@ def finetune(dataset_path: Path, checkpoint_path: Path, training_params: dict):
 
     checkpoint_path = checkpoint_path / "finetuned"
     checkpoint_path.mkdir(exist_ok=True, parents=True)
-    print(len(ds))
 
     loss = SimpleClassificationLoss({})
     # loss = TripletLoss(
@@ -547,6 +546,8 @@ if __name__ == "__main__":
         print("-" * 20)
         print(params)
         chk_p = save_path / exp
+        with open(chk_p / "params.json", "w") as f:
+            json.dump(params, f)
         train(dataset_path, chk_p, model_params=params["model_params"], training_params=params["training_params"],)
         finetune(dataset_path, chk_p, training_params=params["training_params"],)
 
