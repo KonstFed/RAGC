@@ -9,8 +9,8 @@ class Projector(nn.Module):
         self.compose = nn.Sequential(
             nn.Linear(orig_emb_size, 1024),
             nn.ReLU(),
-            #nn.Linear(1024, 2048),
-            #nn.ReLU(),
+            nn.Linear(1024, 1024),
+            nn.ReLU(),
             #nn.Linear(2048, 2048),
             #nn.ReLU(),
             #nn.Linear(2048, 768),
