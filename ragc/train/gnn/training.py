@@ -317,7 +317,7 @@ class Trainer:
                     batched_graph,
                     node_embeddings["FUNCTION"],
                     query_embs,
-                    batched_graph["FUNCTION"].ptr,
+                    batched_graph.init_embs_ptr,
                     k=k,
                 )
 
@@ -416,9 +416,9 @@ def train(dataset_path: Path, checkpoint_path: Path):
         model=model,
         loss_fn=triplet_loss,
         dataset=ds,
-        batch_size=52,
+        batch_size=10,
         optimizer=optimizer,
-        retrieve_k=10,
+        retrieve_k=5,
         checkpoint_save_path=checkpoint_path,
     )
     trainer.train(400, n_early_stop=10)
@@ -452,9 +452,9 @@ def finetune(dataset_path: Path, checkpoint_path: Path):
         model=model,
         loss_fn=loss,
         dataset=ds,
-        batch_size=52,
+        batch_size=10,
         optimizer=optimizer,
-        retrieve_k=10,
+        retrieve_k=5,
         docstring=True,
         checkpoint_save_path=checkpoint_path,
     )
@@ -462,10 +462,10 @@ def finetune(dataset_path: Path, checkpoint_path: Path):
 
 
 if __name__ == "__main__":
-    torch.manual_seed(0)
+    torch.manual_seed(100)
     dataset_path = Path("data/torch_cache/repobench")
     save_path = Path("data/gnn_weights/graphsage")
     save_path.mkdir(exist_ok=True, parents=True)
 
     train(dataset_path, save_path)
-    finetune(dataset_path, save_path)
+    # finetune(dataset_path, save_path)
