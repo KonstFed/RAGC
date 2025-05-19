@@ -31,29 +31,29 @@ class HeteroGraphSAGE(torch.nn.Module):
         self.proj_map = self._init_projectors(orig_emb_size=orig_emb_size, node_emb_size=out_channels)
 
     def _init_conv_layer(self, hidden_dim: int) -> dict[tuple[str, str, str], torch.nn.Module]:
-        file_conv = SAGEConv((-1, -1), hidden_dim, aggr="mean")
-        file_call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
-        own_conv = SAGEConv((-1, -1), hidden_dim, "mean")
-        call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
+        self.file_conv = SAGEConv((-1, -1), hidden_dim, aggr="mean")
+        self.file_call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
+        self.own_conv = SAGEConv((-1, -1), hidden_dim, "mean")
+        self.call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
 
         block_map = {
             # file own relations
-            ("FILE", "OWNER", "CLASS"): file_conv,
-            ("FILE", "OWNER", "FUNCTION"): file_conv,
+            ("FILE", "OWNER", "CLASS"): self.file_conv,
+            ("FILE", "OWNER", "FUNCTION"): self.file_conv,
             # file calls
-            ("FILE", "CALL", "FUNCTION"): file_call_conv,
-            ("FILE", "IMPORT", "FILE"): file_call_conv,
-            ("FILE", "IMPORT", "CLASS"): file_call_conv,
-            ("FILE", "IMPORT", "FUNCTION"): file_call_conv,
+            ("FILE", "CALL", "FUNCTION"): self.file_call_conv,
+            ("FILE", "IMPORT", "FILE"): self.file_call_conv,
+            ("FILE", "IMPORT", "CLASS"): self.file_call_conv,
+            ("FILE", "IMPORT", "FUNCTION"): self.file_call_conv,
             # own relations
-            ("CLASS", "OWNER", "CLASS"): own_conv,
-            ("CLASS", "OWNER", "FUNCTION"): own_conv,
-            ("FUNCTION", "OWNER", "CLASS"): own_conv,
-            ("FUNCTION", "OWNER", "FUNCTION"): own_conv,
+            ("CLASS", "OWNER", "CLASS"): self.own_conv,
+            ("CLASS", "OWNER", "FUNCTION"): self.own_conv,
+            ("FUNCTION", "OWNER", "CLASS"): self.own_conv,
+            ("FUNCTION", "OWNER", "FUNCTION"): self.own_conv,
             # call relations
-            ("CLASS", "CALL", "FUNCTION"): call_conv,
-            ("CLASS", "INHERITED", "CLASS"): call_conv,
-            ("FUNCTION", "CALL", "FUNCTION"): call_conv,
+            ("CLASS", "CALL", "FUNCTION"): self.call_conv,
+            ("CLASS", "INHERITED", "CLASS"): self.call_conv,
+            ("FUNCTION", "CALL", "FUNCTION"): self.call_conv,
         }
         return block_map
 

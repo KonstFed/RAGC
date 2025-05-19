@@ -35,24 +35,29 @@ class HeteroGAT(torch.nn.Module):
         def gat():
             return GATConv((-1, -1), hidden_dim, heads=self.heads, concat=False, add_self_loops=False)
 
+        self.file_own_conv = gat()
+        self.file_call_conv = gat()
+        self.own_conv = gat()
+        self.call_conv = gat()
+
         return {
             # file own relations
-            ("FILE", "OWNER", "CLASS"): gat(),
-            ("FILE", "OWNER", "FUNCTION"): gat(),
+            ("FILE", "OWNER", "CLASS"): self.file_own_conv,
+            ("FILE", "OWNER", "FUNCTION"): self.file_own_conv,
             # file calls
-            ("FILE", "CALL", "FUNCTION"): gat(),
-            ("FILE", "IMPORT", "FILE"): gat(),
-            ("FILE", "IMPORT", "CLASS"): gat(),
-            ("FILE", "IMPORT", "FUNCTION"): gat(),
+            ("FILE", "CALL", "FUNCTION"): self.file_call_conv,
+            ("FILE", "IMPORT", "FILE"): self.file_call_conv,
+            ("FILE", "IMPORT", "CLASS"): self.file_call_conv,
+            ("FILE", "IMPORT", "FUNCTION"): self.file_call_conv,
             # own relations
-            ("CLASS", "OWNER", "CLASS"): gat(),
-            ("CLASS", "OWNER", "FUNCTION"): gat(),
-            ("FUNCTION", "OWNER", "CLASS"): gat(),
-            ("FUNCTION", "OWNER", "FUNCTION"): gat(),
+            ("CLASS", "OWNER", "CLASS"): self.own_conv,
+            ("CLASS", "OWNER", "FUNCTION"): self.own_conv,
+            ("FUNCTION", "OWNER", "CLASS"): self.own_conv,
+            ("FUNCTION", "OWNER", "FUNCTION"): self.own_conv,
             # call relations
-            ("CLASS", "CALL", "FUNCTION"): gat(),
-            ("CLASS", "INHERITED", "CLASS"): gat(),
-            ("FUNCTION", "CALL", "FUNCTION"): gat(),
+            ("CLASS", "CALL", "FUNCTION"): self.call_conv,
+            ("CLASS", "INHERITED", "CLASS"): self.call_conv,
+            ("FUNCTION", "CALL", "FUNCTION"): self.call_conv,
         }
 
     def _init_projectors(self, orig_emb_size: int, node_emb_size: int) -> dict[tuple[str, str, str], torch.nn.Module]:
