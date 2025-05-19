@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from copy import copy, deepcopy
 
@@ -99,6 +100,7 @@ class Trainer:
             val_tf=val_transform,
             test_tf=val_transform,
         )
+        print("Train ds: ", len(self.train_ds), "Val ds: ", len(self.val_ds), "Test ds: ", len(self.test_ds))
         # self.train_loader = DataLoader(
         #     self.train_ds,
         #     batch_size=batch_size,
@@ -117,7 +119,12 @@ class Trainer:
             collate_fn=collate_for_validation,
             shuffle=False,
         )
-
+        self.test_loader = DataLoader(
+            self.test_ds,
+            batch_size=batch_size,
+            collate_fn=collate_for_validation,
+            shuffle=False,
+        )
         self.hard_sampler = HardSampler()
         # self.clas_val_loader = DataLoader(class_val_ds, batch_size=batch_size, collate_fn=collate_with_samples, shuffle=False)
 
@@ -359,7 +366,7 @@ class Trainer:
             "mrr": sum(reciprocal_ranks) / len(reciprocal_ranks),
         }
 
-    def train(self, n_epoch: int, n_early_stop: int = -1):
+    def train(self, n_epoch: int, n_early_stop: int = -1, eary_stop_metric="recall") -> dict[str, float]:
         if n_early_stop == -1:
             n_early_stop = n_epoch
 
@@ -368,7 +375,7 @@ class Trainer:
         for epoch in range(n_epoch):
             print(f"--------Epoch {epoch}-------")
             print("Training")
-            self.train_epoch()
+            # self.train_epoch()
 
             # print("Simple acc metrics")
             # class_metrics = self.validate_epoch(self.val_loader)
@@ -378,7 +385,7 @@ class Trainer:
             retrieval_metrics = self.validate_retrieval_epoch(self.val_loader, k=self.retrieve_k)
             print(retrieval_metrics)
 
-            if retrieval_metrics["recall"] > best_metric:
+            if retrieval_metrics[eary_stop_metric] > best_metric:
                 torch.save(self.model, self.checkpoint_save_path / "BEST_CHECKPOINT.pt")
                 best_metric = retrieval_metrics["recall"]
                 cnt = 0
@@ -393,8 +400,12 @@ class Trainer:
 
             torch.save(self.model, self.checkpoint_save_path / "LAST_CHECKPOINT.pt")
 
+        self.model = torch.load(self.checkpoint_save_path / "BEST_CHECKPOINT.pt", weights_only=False, map_location=self.device,)
+        test_metrics = self.validate_retrieval_epoch(self.test_loader, k=self.retrieve_k)
+        return test_metrics
 
-def train(dataset_path: Path, checkpoint_path: Path):
+
+def train(dataset_path: Path, checkpoint_path: Path, model_params: dict, training_params: dict):
     ds = TorchGraphDataset(
         root=dataset_path,
     )
@@ -408,7 +419,8 @@ def train(dataset_path: Path, checkpoint_path: Path):
         reduction="mean",
     )
 
-    model = HeteroGraphSAGE(768, 768, 768, 3)
+    # model = HeteroGraphSAGE(768, 768, 768, 3)
+    model = HeteroGraphSAGE(**model_params)
     #model = HeteroGAT(768, 562, 562, 5, heads=4)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
@@ -416,15 +428,17 @@ def train(dataset_path: Path, checkpoint_path: Path):
         model=model,
         loss_fn=triplet_loss,
         dataset=ds,
-        batch_size=10,
+        batch_size=training_params["batch_size"],
         optimizer=optimizer,
-        retrieve_k=5,
+        retrieve_k=training_params["k"],
         checkpoint_save_path=checkpoint_path,
     )
-    trainer.train(400, n_early_stop=10)
+    test_metrics = trainer.train(400, n_early_stop=1, eary_stop_metric=training_params["stop_metric"])
+    with (checkpoint_path / "test_metrics.json").open("w") as f:
+        json.dump(test_metrics, f)
 
 
-def finetune(dataset_path: Path, checkpoint_path: Path):
+def finetune(dataset_path: Path, checkpoint_path: Path, training_params: dict):
     # finetune on docstring only
     ds = TorchGraphDataset(
         root=dataset_path,
@@ -452,20 +466,89 @@ def finetune(dataset_path: Path, checkpoint_path: Path):
         model=model,
         loss_fn=loss,
         dataset=ds,
-        batch_size=10,
+        batch_size=training_params["batch_size"],
         optimizer=optimizer,
-        retrieve_k=5,
+        retrieve_k=training_params["k"],
         docstring=True,
         checkpoint_save_path=checkpoint_path,
     )
-    trainer.train(20, n_early_stop=10)
-
+    test_metrics = trainer.train(20, n_early_stop=1, eary_stop_metric=training_params["stop_metric"])
+    with (checkpoint_path / "test_metrics.json").open("w") as f:
+        json.dump(test_metrics, f)
 
 if __name__ == "__main__":
+    import random
+
+    random.seed(100)
     torch.manual_seed(100)
     dataset_path = Path("data/torch_cache/repobench")
-    save_path = Path("data/gnn_weights/graphsage")
+    save_path = Path("data/gnn_weights/experiments")
     save_path.mkdir(exist_ok=True, parents=True)
 
-    train(dataset_path, save_path)
-    # finetune(dataset_path, save_path)
+
+    experiments = {
+        "classic_5": {
+            "model_params": {
+                "orig_emb_size": 768,
+                "hidden_dim": 768,
+                "out_channels": 768,
+                "num_layers": 5,
+            },
+            "training_params": {
+                "batch_size": 200,
+                "k": 30,
+                "stop_metric": "mrr",
+            },
+        },
+        "classic_3": {
+            "model_params": {
+                "orig_emb_size": 768,
+                "hidden_dim": 768,
+                "out_channels": 768,
+                "num_layers": 3,
+            },
+            "training_params": {
+                "batch_size": 200,
+                "k": 30,
+                "stop_metric": "mrr",
+            },
+        },
+        "classic_7": {
+            "model_params": {
+                "orig_emb_size": 768,
+                "hidden_dim": 768,
+                "out_channels": 768,
+                "num_layers": 7,
+            },
+            "training_params": {
+                "batch_size": 200,
+                "k": 30,
+                "stop_metric": "mrr",
+            },
+        },
+        "bigger_hidden_emb_5": {
+            "model_params": {
+                "orig_emb_size": 768,
+                "hidden_dim": 1024,
+                "out_channels": 1024,
+                "num_layers": 5,
+            },
+            "training_params": {
+                "batch_size": 10,
+                "k": 5,
+                "stop_metric": "mrr",
+            },
+        },
+    }
+
+    for exp, params in experiments.items():
+        print("-" * 20)
+        print(exp)
+        print("-" * 20)
+        print(params)
+        chk_p = save_path / exp
+        train(dataset_path, chk_p, model_params=params["model_params"], training_params=params["training_params"],)
+        finetune(dataset_path, chk_p, training_params=params["training_params"],)
+
+    # train(dataset_path, save_path)
+    # # finetune(dataset_path, save_path)
