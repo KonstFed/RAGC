@@ -384,7 +384,7 @@ class Trainer:
             print("Retrieval metrics:")
             retrieval_metrics = self.validate_retrieval_epoch(self.val_loader, k=self.retrieve_k)
             print(retrieval_metrics)
-
+            print(best_metric, retrieval_metrics[eary_stop_metric], retrieval_metrics[eary_stop_metric] > best_metric)
             if retrieval_metrics[eary_stop_metric] > best_metric:
                 torch.save(self.model, self.checkpoint_save_path / "BEST_CHECKPOINT.pt")
                 best_metric = retrieval_metrics["recall"]
@@ -433,7 +433,7 @@ def train(dataset_path: Path, checkpoint_path: Path, model_params: dict, trainin
         retrieve_k=training_params["k"],
         checkpoint_save_path=checkpoint_path,
     )
-    test_metrics = trainer.train(400, n_early_stop=1, eary_stop_metric=training_params["stop_metric"])
+    test_metrics = trainer.train(400, n_early_stop=10, eary_stop_metric=training_params["stop_metric"])
     with (checkpoint_path / "test_metrics.json").open("w") as f:
         json.dump(test_metrics, f)
 
@@ -471,7 +471,7 @@ def finetune(dataset_path: Path, checkpoint_path: Path, training_params: dict):
         docstring=True,
         checkpoint_save_path=checkpoint_path,
     )
-    test_metrics = trainer.train(20, n_early_stop=1, eary_stop_metric=training_params["stop_metric"])
+    test_metrics = trainer.train(20, n_early_stop=5, eary_stop_metric=training_params["stop_metric"])
     with (checkpoint_path / "test_metrics.json").open("w") as f:
         json.dump(test_metrics, f)
 
