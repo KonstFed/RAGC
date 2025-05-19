@@ -52,8 +52,10 @@ class ToHetero(BaseTransform, BaseTransformConfig):
 
         node_map_by_cat = {}
 
-        docstring_mask = torch.zeros(graph.num_nodes, dtype=torch.bool)
-        docstring_mask[graph.docstring_mask] = True
+        has_docstring = "docstring_mask" in graph
+        if has_docstring:
+            docstring_mask = torch.zeros(graph.num_nodes, dtype=torch.bool)
+            docstring_mask[graph.docstring_mask] = True
 
 
         for node_type in [NodeTypeNumeric.FILE, NodeTypeNumeric.CLASS, NodeTypeNumeric.FUNCTION]:
@@ -68,9 +70,10 @@ class ToHetero(BaseTransform, BaseTransformConfig):
             h_graph[node_type.name].signature = [graph.signature[i] for i in node_idx]
             h_graph[node_type.name].docstring = [graph.docstring[i] for i in node_idx]
             h_graph[node_type.name].name = [graph.name[i] for i in node_idx]
-
-            h_graph[node_type.name].query_emb = graph.docstring_embeddings[node_mask]
-            h_graph[node_type.name].docstring_mask = docstring_mask[node_mask]
+            
+            if has_docstring:
+                h_graph[node_type.name].query_emb = graph.docstring_embeddings[node_mask]
+                h_graph[node_type.name].docstring_mask = docstring_mask[node_mask]
 
 
         for f, edge, s in ALLOWED_COMBINATIONS:
