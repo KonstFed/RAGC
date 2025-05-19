@@ -100,7 +100,9 @@ class Trainer:
             val_tf=val_transform,
             test_tf=val_transform,
         )
-        print("Train ds: ", len(self.train_ds), "Val ds: ", len(self.val_ds), "Test ds: ", len(self.test_ds))
+        print("Per n. graphs:\nTrain ds: ", len(self.train_ds), "Val ds: ", len(self.val_ds), "Test ds: ", len(self.test_ds))
+
+
         # self.train_loader = DataLoader(
         #     self.train_ds,
         #     batch_size=batch_size,
@@ -387,7 +389,7 @@ class Trainer:
             print(best_metric, retrieval_metrics[eary_stop_metric], retrieval_metrics[eary_stop_metric] > best_metric)
             if retrieval_metrics[eary_stop_metric] > best_metric:
                 torch.save(self.model, self.checkpoint_save_path / "BEST_CHECKPOINT.pt")
-                best_metric = retrieval_metrics["recall"]
+                best_metric = retrieval_metrics[eary_stop_metric]
                 cnt = 0
             else:
                 cnt += 1
