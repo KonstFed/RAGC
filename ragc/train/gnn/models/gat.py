@@ -1,13 +1,13 @@
 import torch
-from torch_geometric.nn import HeteroConv, SAGEConv
-
+from torch.nn import ModuleList
+from torch_geometric.nn import HeteroConv, GATConv
 from ragc.train.gnn.models.projector import Projector
 import torch.nn.functional as F
-from torch_geometric.data import Batch, HeteroData
+from torch_geometric.data import Batch
 
 
-class HeteroGraphSAGE(torch.nn.Module):
-    """Directed graphsage."""
+class HeteroGAT(torch.nn.Module):
+    """Heterogeneous Graph Attention Network using GATConv."""
 
     def freeze_gnn(self) -> None:
         """Freeze all GNN related weights."""
@@ -15,31 +15,35 @@ class HeteroGraphSAGE(torch.nn.Module):
             for param in conv.parameters():
                 param.requires_grad = False
 
-    def __init__(self, orig_emb_size: int, hidden_dim: int, out_channels: int, num_layers: int):
+    def __init__(self, orig_emb_size: int, hidden_dim: int, out_channels: int, num_layers: int, heads: int = 2):
         super().__init__()
-        self.convs = torch.nn.ModuleList()
+        self.convs = ModuleList()
+        self.heads = heads
+
         for i in range(num_layers):
             if i == num_layers - 1:
                 layer_conv = self._init_conv_layer(hidden_dim=out_channels)
             else:
                 layer_conv = self._init_conv_layer(hidden_dim=hidden_dim)
 
-            # Create a SAGEConv for each edge type
-            conv = HeteroConv(layer_conv, aggr="mean")
+            conv = HeteroConv(layer_conv, aggr="sum")
             self.convs.append(conv)
 
         self.proj_map = self._init_projectors(orig_emb_size=orig_emb_size, node_emb_size=out_channels)
 
     def _init_conv_layer(self, hidden_dim: int) -> dict[tuple[str, str, str], torch.nn.Module]:
-        self.file_conv = SAGEConv((-1, -1), hidden_dim, aggr="mean")
-        self.file_call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
-        self.own_conv = SAGEConv((-1, -1), hidden_dim, "mean")
-        self.call_conv = SAGEConv((-1, -1), hidden_dim, "mean")
+        def gat():
+            return GATConv((-1, -1), hidden_dim, heads=self.heads, concat=False, add_self_loops=False)
 
-        block_map = {
+        self.file_own_conv = gat()
+        self.file_call_conv = gat()
+        self.own_conv = gat()
+        self.call_conv = gat()
+
+        return {
             # file own relations
-            ("FILE", "OWNER", "CLASS"): self.file_conv,
-            ("FILE", "OWNER", "FUNCTION"): self.file_conv,
+            ("FILE", "OWNER", "CLASS"): self.file_own_conv,
+            ("FILE", "OWNER", "FUNCTION"): self.file_own_conv,
             # file calls
             ("FILE", "CALL", "FUNCTION"): self.file_call_conv,
             ("FILE", "IMPORT", "FILE"): self.file_call_conv,
@@ -55,7 +59,6 @@ class HeteroGraphSAGE(torch.nn.Module):
             ("CLASS", "INHERITED", "CLASS"): self.call_conv,
             ("FUNCTION", "CALL", "FUNCTION"): self.call_conv,
         }
-        return block_map
 
     def _init_projectors(self, orig_emb_size: int, node_emb_size: int) -> dict[tuple[str, str, str], torch.nn.Module]:
         self.file_own_proj = Projector(orig_emb_size, node_emb_size)
@@ -63,7 +66,7 @@ class HeteroGraphSAGE(torch.nn.Module):
         self.own_call_proj = Projector(orig_emb_size, node_emb_size)
         self.call_proj = Projector(orig_emb_size, node_emb_size)
 
-        proj_map = {
+        return {
             # file own relations
             ("FILE", "OWNER", "CLASS"): self.file_own_proj,
             ("FILE", "OWNER", "FUNCTION"): self.file_own_proj,
@@ -82,15 +85,11 @@ class HeteroGraphSAGE(torch.nn.Module):
             ("CLASS", "INHERITED", "CLASS"): self.call_proj,
             ("FUNCTION", "CALL", "FUNCTION"): self.call_proj,
         }
-        return proj_map
 
-    def forward(self, x, edge_dict) -> dict[str, torch.Tensor]:
+    def forward(self, x_dict: dict[str, torch.Tensor], edge_index_dict: dict[tuple[str, str, str], torch.Tensor]) -> dict[str, torch.Tensor]:
         for conv in self.convs:
-            # Process all edge types and update node features
-            x_dict = conv(x, edge_dict)
-            # Apply ReLU to all node types
-            x_dict = {key: x.relu() for key, x in x_dict.items()}
-
+            x_dict = conv(x_dict, edge_index_dict)
+            x_dict = {k: F.relu(v) for k, v in x_dict.items()}
         return x_dict
 
     def retrieve_single(
@@ -104,7 +103,7 @@ class HeteroGraphSAGE(torch.nn.Module):
         projected = F.normalize(projected, dim=0)
         node_embeddings = F.normalize(node_embeddings, dim=1)
         cos_sim = torch.matmul(projected, node_embeddings.T)
-        _values, indices = cos_sim.topk(k=min(k, node_embeddings.shape[0]))
+        _, indices = cos_sim.topk(k=min(k, node_embeddings.shape[0]))
         return indices
 
     def retrieve(
@@ -114,15 +113,11 @@ class HeteroGraphSAGE(torch.nn.Module):
         embeddings: torch.Tensor,
         emb_ptr: torch.Tensor,
         k: int,
-        # projected_ptr: torch.Tensor,
-        # node_ptr: torch.Tensor,
     ) -> list[list[int]]:
         relation_type = ("FUNCTION", "CALL", "FUNCTION")
         node_ptr = batch["FUNCTION"].ptr
 
         projected_embs = self.proj_map[relation_type](embeddings)
-
-        # l2 normalize for cos distance
         projected_embs = F.normalize(projected_embs, p=2, dim=1)
         node_embs = F.normalize(fund_node_embeddings, dim=1, p=2)
 
@@ -136,7 +131,7 @@ class HeteroGraphSAGE(torch.nn.Module):
 
             cosine_distances = cur_proj_embs @ cur_node_embs.T
             cur_k = min(k, cosine_distances.shape[1])
-            _values, indices = torch.topk(cosine_distances, k=cur_k, dim=1)
+            _, indices = torch.topk(cosine_distances, k=cur_k, dim=1)
             indices += c_node_ptr
             out.extend(indices.tolist())
 

@@ -45,11 +45,10 @@ class InverseEdges(BaseTransform):
             # Store reversed edges
             data[dst, new_edge_type[1], src].edge_index = reversed_edge_index
 
-
         if "positives" in data:
-            data.positives = {tuple(list(k)[::-1]):v for k,v in data.positives.items()}
+            data.positives = {tuple(list(k)[::-1]): v for k, v in data.positives.items()}
         if "positives_ptr" in data:
-            data.positives_ptr = {tuple(list(k)[::-1]):v for k,v in data.positives_ptr.items()}
+            data.positives_ptr = {tuple(list(k)[::-1]): v for k, v in data.positives_ptr.items()}
         return data
 
 
@@ -57,6 +56,7 @@ def sample_same_link_pairs(
     graph: HeteroData,
     link_type: tuple[str, str, str],
     n_samples: int,
+    nodes2use: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Sample for triplet loss from same links only.
 
@@ -64,6 +64,7 @@ def sample_same_link_pairs(
         graph (HeteroData): from where to sample
         link_type (tuple[str, str, str]): which type of edge to sample. Example `("FUNCTION", "CALL", "FUNCTION)`
         n_samples (int): upper bound of number samples to get.
+        nodes2use (torch.Tensor | None): use only this nodes as source for sampling
 
     Returns:
         tuple[torch.Tensor, torch.Tensor]: first is positive edge index and second is negative.
@@ -71,10 +72,15 @@ def sample_same_link_pairs(
 
     """
     c_edge_index = graph[link_type].edge_index
-    n_samples = min(n_samples, c_edge_index.size(1))
 
     # positive pairs
-    perm = torch.randperm(c_edge_index.size(1))
+    if nodes2use is not None:
+        cutted_edge_index = c_edge_index[:, torch.isin(c_edge_index[0, :], nodes2use)]
+        n_samples = min(n_samples, cutted_edge_index.size(1))
+        perm = torch.randperm(cutted_edge_index.size(1))
+    else:
+        n_samples = min(n_samples, c_edge_index.size(1))
+        perm = torch.randperm(c_edge_index.size(1))
     idx = perm[: min(n_samples, len(perm))]
     pos_samples = c_edge_index[:, idx]
 
@@ -96,11 +102,25 @@ def sample_same_link_pairs(
 class SamplePairs(BaseTransform):
     """Sample for training pairs."""
 
-    def __init__(self, links: list[tuple[str, str, str]], sample_ratio: float, min_size: int, max_size: int):
+    def __init__(
+        self,
+        links: list[tuple[str, str, str]],
+        sample_ratio: float,
+        min_size: int,
+        max_size: int,
+        use_docstring: bool = False,
+    ):
         self.links = links
         self.sample_ratio = sample_ratio
         self.min_size = min_size
         self.max_size = max_size
+        self.use_docstring = use_docstring
+
+        self.types = set()
+
+        for src, _, dst in links:
+            self.types.add(src)
+            self.types.add(dst)
 
     def forward(
         self,
@@ -114,8 +134,18 @@ class SamplePairs(BaseTransform):
             n_samples = max(round(num_func_calls * self.sample_ratio), self.min_size)
             n_samples = min(self.max_size, n_samples)
 
-            pos, neg = sample_same_link_pairs(data, link, n_samples)
+            with_docstring = None
+            if self.use_docstring:
+                with_docstring = torch.where(data[link[0]].docstring_mask)[0]
+
+            pos, neg = sample_same_link_pairs(data, link, n_samples, nodes2use=with_docstring)
             samples[link] = (pos, neg)
+
+        if not self.use_docstring:
+            # костыль для прокидывания эбмедингов запроса используя эмбединги кода
+            for t in self.types:
+                data[t].query_emb = data[t].x
+
         data.samples = samples
         return data
 
@@ -153,7 +183,7 @@ class PositiveSampler(BaseTransform):
 class HardSampler:
     ### VERY IMPORTANT: edges will be reversed here for correct message passing
     def __init__(self, greedy: bool = True):
-        self.greedy= greedy
+        self.greedy = greedy
 
     def get_cosine_sim_matrix(self, projected_emds: torch.Tensor, node_embeddings: torch.Tensor) -> torch.Tensor:
         projected_embs = F.normalize(projected_emds, p=2, dim=1)
@@ -167,7 +197,6 @@ class HardSampler:
             additional_indices = indices[torch.randint(len(indices), size=(diff,))].clone()
             indices = torch.cat([indices, additional_indices], dim=0)
         return indices
-
 
     def forward_single(
         self,
@@ -203,7 +232,13 @@ class HardSampler:
         g_neg = torch.cat(g_neg, dim=1)
         return g_pos, g_neg
 
-    def forward(self, data: HeteroData, link_type: tuple[str, str, str], node_embbeddings: torch.Tensor, positive_projected_embs: torch.Tensor,):
+    def forward(
+        self,
+        data: HeteroData,
+        link_type: tuple[str, str, str],
+        node_embbeddings: torch.Tensor,
+        positive_projected_embs: torch.Tensor,
+    ):
         graphs = unbatch_with_positives(data)
         src, _edge, dst = link_type
 
@@ -212,12 +247,12 @@ class HardSampler:
 
         for i, graph in enumerate(graphs):
             p_start = data.positives_ptr[link_type][i]
-            p_end = data.positives_ptr[link_type][i+1]
+            p_end = data.positives_ptr[link_type][i + 1]
             cur_proj_embs = positive_projected_embs[p_start:p_end]
 
             cur_node_embs = node_embbeddings[src]
             start = data[src].ptr[i]
-            end = data[src].ptr[i+1]
+            end = data[src].ptr[i + 1]
             cur_node_embs = cur_node_embs[start:end]
 
             cur_pos_pairs, cur_neg_pairs = self.forward_single(
@@ -334,3 +369,36 @@ class SampleCallPairsSubgraph(BaseTransform):
         new_graph.init_embs = embs
 
         return new_graph
+
+class SampleDocstringPairsSubgraph(BaseTransform):
+    LINKS = [("FUNCTION", "CALL", "FUNCTION")]
+
+    def forward(self, data: HeteroData) -> list[HeteroData]:
+        out = []
+        for link in self.LINKS:
+            src, _edge, dst = link
+            positive_pairs = data[link].edge_index
+            with_docstring = torch.where(data[src].docstring_mask)[0]
+
+            for i in range(len(with_docstring)):
+                positive_pairs = positive_pairs[:, positive_pairs[0] == with_docstring[i]]
+                if positive_pairs.shape[1] == 0:
+                    continue
+                subgraph_mask = remove_caller_subgraph(data, with_docstring[i].view(1), return_mask=True)
+
+                cur_pairs = positive_pairs[:, subgraph_mask[dst][positive_pairs[1]]]
+                if cur_pairs.shape[1] == 0:
+                    # all callee are removed as dependent of the calller
+                    continue
+
+                subgraph = data.subgraph({k: torch.where(v)[0] for k, v in subgraph_mask.items()})
+                cur_pairs[0, :] = 0
+                subgraph.pairs = cur_pairs
+
+                _q_emb = data[src].query_emb[with_docstring[i]]
+                if torch.allclose(_q_emb, torch.zeros_like(_q_emb)):
+                    raise ValueError("Query embedding mismatch")
+                subgraph.init_embs = _q_emb.view(1, -1)
+                out.append(subgraph)
+
+        return out

@@ -63,7 +63,7 @@ def greedy_scan(graph: HeteroData, node_idx: int, node_type: str) -> dict[str, t
     return visited
 
 
-def get_all_components(graph: HeteroData) -> dict[str, torch.Tensor]:
+def get_all_components(graph: HeteroData) -> list[torch.Tensor]:
     """Map graph into connected components
 
     It uses assumption that all nodes are either FILE or owned by only one file."""

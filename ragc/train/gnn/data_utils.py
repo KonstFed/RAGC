@@ -1,3 +1,5 @@
+from random import shuffle, random
+
 import torch
 from torch.utils.data import Dataset, random_split
 from torch_geometric.data import Batch, HeteroData
@@ -14,15 +16,16 @@ class MapDataset(Dataset):
     Note that data is not cloned/copied from the initial dataset.
     """
 
-    def __init__(self, dataset: Dataset, map_fn: BaseTransform):
+    def __init__(self, dataset: Dataset, indices: list[int], map_fn: BaseTransform):
         self.dataset = dataset
+        self.indices = indices
         self.map = map_fn
 
     def __getitem__(self, index: int):
-        return self.map(self.dataset[index])
+        return self.map(self.dataset[self.indices[index]])
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.indices)
 
 
 def train_val_test_split(
@@ -35,12 +38,42 @@ def train_val_test_split(
     """Split dataset into training, validation and test part."""
     if len(ratios) != 3:
         raise ValueError(f"Not correct ratios {ratios}")
+    
+    # train_ds, val_ds, test_ds = random_split(ds, ratios)
+    buckets = [[] for _ in range(len(ratios))]
 
-    train_ds, val_ds, test_ds = random_split(ds, ratios)
+    candidates = []
+    indices = list(range(len(ds)))
+    shuffle(indices)
+    for i in indices:
+        n_docs = len(ds[i].docstring_mask)
+        if n_docs == 0:
+            # if no docstring distribute equally
+            r = random()
+            if r < ratios[0]:
+                buckets[0].append(i)
+            elif r >= ratios[0] and r < ratios[0] + ratios[1]:
+                buckets[1].append(i)
+            else:
+                buckets[2].append(i)
+        else:
+            candidates.append((i, n_docs))
 
-    train_ds = MapDataset(train_ds, train_tf)
-    val_ds = MapDataset(val_ds, val_tf)
-    test_ds = MapDataset(val_ds, test_tf)
+    candidates.sort(key=lambda x: -x[1])
+    total = sum([c[1] for c in candidates])
+    bucket_need = [r * total for r in ratios]
+    for ind, val in candidates:
+        bucket_ind = bucket_need.index(max(bucket_need))
+        buckets[bucket_ind].append(ind)
+        bucket_need[bucket_ind] -= val
+
+    assert len(set(buckets[0]).intersection(buckets[1])) == 0
+    assert len(set(buckets[0]).intersection(buckets[2])) == 0
+    assert len(set(buckets[2]).intersection(buckets[1])) == 0
+
+    train_ds = MapDataset(ds, buckets[0], train_tf)
+    val_ds = MapDataset(ds, buckets[1], val_tf)
+    test_ds = MapDataset(ds, buckets[2], test_tf)
 
     return train_ds, val_ds, test_ds
 
@@ -152,6 +185,14 @@ def unbatch_with_positives(batch: Batch) -> list[HeteroData]:
 
 def collate_for_validation(batch: list[HeteroData]) -> Batch:
     """Collate hetero graphs with sampled pairs for validation."""
+    new_batch = []
+    for blist in batch:
+        if isinstance(blist, list):
+            new_batch.extend(blist)
+        else:
+            new_batch.append(blist)
+    batch = new_batch
+
     batch = [b for b in batch if b.pairs.shape[1] != 0]
     pairs = [b.pairs for b in batch]
     init_embs = [b.init_embs for b in batch]
