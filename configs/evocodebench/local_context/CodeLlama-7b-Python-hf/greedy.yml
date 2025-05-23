@@ -9,9 +9,7 @@ inference:
     max_length: 1024
     store_in_gpu: false
   retrieval:
-    type: gnn
-    k: 5
-    model_path: /home/jovyan/work/diplom/RAGC/models/gnn/BEST_CHECKPOINT.pt
+    type: no_retrieval
   fusion:
     type: augmentation
     generator:
@@ -19,6 +17,7 @@ inference:
       model_path: /home/jovyan/work/diplom/RAGC/models/CodeLlama-7b-Python-hf
       max_input: 16354
       max_gen: 4096
+      local_context_lines: 2000
       generation_args:
         no_repeat_ngram_size: 32
 dataset:

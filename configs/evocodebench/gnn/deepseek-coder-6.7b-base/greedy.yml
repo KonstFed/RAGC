@@ -11,7 +11,7 @@ inference:
   retrieval:
     type: gnn
     k: 5
-    model_path: /home/jovyan/work/diplom/RAGC/models/gnn/LAST_CHECKPOINT.pt
+    model_path: /home/jovyan/work/diplom/RAGC/models/gnn/BEST_CHECKPOINT.pt
   fusion:
     type: augmentation
     generator:

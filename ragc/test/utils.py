@@ -16,12 +16,15 @@ def load_tasks(path: str | os.PathLike) -> List[Dict[str, Any]]:
     return tasks
 
 
-def extract_signature(completion_path: str | os.PathLike, signature_position: Tuple[int, int]) -> str:
-    start, end = signature_position
+def extract_lines(completion_path: str | os.PathLike, lines_position: Tuple[int, int]) -> str:
+    start, end = lines_position
+    if start > end:
+        return ''
+    
     with open(completion_path, "r") as f:
         completion_lines = f.read().split("\n")[start - 1 : end]
 
-    signature = "\n".join(textwrap.dedent(line) for line in completion_lines)
+    signature = textwrap.dedent("\n".join(line for line in completion_lines))
     return signature
 
 
