@@ -1,0 +1,32 @@
+inference:
+  parser:
+    cache_path: null
+    type: python_parser
+  query_embedder:
+    type: hugging_face
+    model_name: microsoft/unixcoder-base
+    max_batch_size: 256
+    max_length: 1024
+    store_in_gpu: false
+  retrieval:
+    type: no_retrieval
+  fusion:
+    type: augmentation
+    generator:
+      type: completion
+      model_path: /home/jovyan/work/diplom/RAGC/models/deepseek-coder-6.7b-base
+      max_input: 16354
+      max_gen: 4096
+      local_context_lines: 2000
+      generation_args:
+        no_repeat_ngram_size: 32
+dataset:
+  root_path: data/torch_cache/evocodebench
+  repos_path: null
+  graphs_path: null
+  parser: null
+  pre_transform: null
+  transform: null
+task_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/data/oracle.jsonl
+repos_path: /home/jovyan/work/diplom/EvoCodeBenchPlus/dataset/repos
+only_with_cross_file: false

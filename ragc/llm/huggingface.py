@@ -128,6 +128,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         model_path: str,
         max_input: int,
         max_gen: int,
+        local_context_lines: int,
         generation_args: Dict[str, Any],
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -146,6 +147,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         # truncation settings
         self.max_input = max_input
         self.max_gen = max_gen
+        self.local_context_lines = local_context_lines
 
         # generation arguments
         self.generation_args = generation_args
@@ -154,19 +156,19 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         self.trunc_inputs = 0
         self.trunc_gens = 0
 
-    def __align(self, generation: str, query: str) -> str:
+    def __align(self, generation: str, completion_path: str) -> str:
         # --- find start_ix ---
         # try to find required namespace completion
-        namespace_comm = query.split('\n')[0].strip()
-        try:
-            generation = generation[generation.index(namespace_comm):]
-        except ValueError:
+        ix = generation.rfind(completion_path)
+        if ix != -1:
+            generation = generation[ix:]
+        else:
             print('WARNING: Alignment failed - completion not found!')
         
         # remove signature
         lines = generation.split('\n')
         start_ix = 0
-        while start_ix < len(lines) - 1 and not lines[start_ix].strip().endswith(':'):
+        while start_ix < len(lines) - 1 and not lines[start_ix].startswith('    '):
             start_ix += 1
     
         # --- find end_ix by searching zero indent ---
@@ -175,28 +177,40 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
             end_ix += 1
     
         # strip end tokens
-        completion = '\n'.join(lines[start_ix + 1:end_ix])\
-            .strip('\n')\
-            .strip('<｜end▁of▁sentence｜>')
+        completion = '\n'.join(lines[start_ix:end_ix]).strip('\n')
         
         return completion
 
-    def __prompt(self, query: str, relevant_nodes: list[Node]) -> str:
+    def __prompt(self, prompt: str, relevant_nodes: list[Node], local_context: str, completion_path: str) -> str:
         # sort by length
         relevant_nodes = sorted(relevant_nodes, key=lambda x: -len(x.code))
-        
+
+        # cross context
         docs = []
         for node in relevant_nodes:
             docs.append(f'#{node.file_path}\n{node.code}')
 
-        return '\n'.join(docs + [query])
+        # local context
+        if self.local_context_lines > 0 and local_context:
+            local_lines = local_context.split('\n')
+            local_context = '\n'.join(local_lines[max(0, len(local_lines) - self.local_context_lines):])
+            local_context_prompt = f'#{completion_path}\n{local_context}'
+        else:
+            local_context_prompt = ""
+
+        return '\n\n'.join(docs + [local_context_prompt] + [prompt])
 
     def generate(self, query: str, relevant_nodes: list[Node]) -> str:
         try:
+            # unpack query
+            prompt = query['prompt']
+            local_context = query['local_context']
+            completion_path = query['completion_path']
+            
             # encode prompt
-            prompt = self.__prompt(query, relevant_nodes)
+            full_prompt = self.__prompt(prompt, relevant_nodes, local_context, completion_path)
             inputs = self.tokenizer(
-                prompt,
+                full_prompt,
                 truncation=True,
                 max_length=self.max_input,
                 return_tensors="pt"
@@ -227,7 +241,10 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
 
             # decoding and alignment
             generation = self.tokenizer.decode(outputs[0])
-            completion = self.__align(generation, query=query)
+            completion = self.__align(generation, completion_path=query['completion_path'])
+            print('full_prompt', full_prompt)
+            print('generation', generation)
+            print('completion', completion)
 
             return completion
         except torch.OutOfMemoryError:
@@ -244,6 +261,7 @@ class CompletionGeneratorConfig(AugmentedGeneratorConfig):
     model_path: str
     max_input: int = 16_354
     max_gen: int = 4096
+    local_context_lines: int = 0
     generation_args: Dict[str, Any] = {}
 
     def create(self) -> CompletionGenerator:
@@ -251,5 +269,6 @@ class CompletionGeneratorConfig(AugmentedGeneratorConfig):
             model_path=self.model_path,
             max_input=self.max_input,
             max_gen=self.max_gen,
+            local_context_lines=self.local_context_lines,
             generation_args=self.generation_args,
         )

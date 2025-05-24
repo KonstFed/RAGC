@@ -2,6 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 from torch_geometric.data import Data
+from typing import Dict
 
 from ragc.fusion import BaseFusion, FusionConfig
 from ragc.graphs import GraphParserConfig, Node
@@ -24,9 +25,9 @@ class Inference:
 
     def __call__(
         self,
-        query: str,
+        query: Dict[str, str],
     ) -> tuple[str, dict]:
-        relevant_nodes = self.retrieve(query)
+        relevant_nodes = self.retrieve(query['prompt'])
         result = self.fusion.fuse_and_generate(query=query, relevant_nodes=relevant_nodes)
         answer = result.pop("answer")
         result["retrieved_context"] = relevant_nodes

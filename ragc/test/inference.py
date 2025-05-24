@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from pathlib import Path
 from pprint import pprint
 
@@ -42,6 +43,10 @@ def generate_completions(
 ):
     output_path = Path(output_path).absolute().resolve()
     raw_output_path = output_path.parent / f"{output_path.stem}__raw.jsonl"
+    output_dir = os.path.dirname(output_path)
+    raw_output_dir = os.path.dirname(raw_output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(raw_output_dir, exist_ok=True)
 
     test_inference_cfg: TestInferenceConfig = load_config(TestInferenceConfig, config_path)
     test_inference = test_inference_cfg.create()

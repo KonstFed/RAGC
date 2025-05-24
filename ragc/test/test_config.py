@@ -13,7 +13,7 @@ from ragc.graphs import Node
 from ragc.graphs.transforms import MaskNodes
 from ragc.graphs.utils import pyg_extract_node
 from ragc.inference import InferenceConfig
-from ragc.test.utils import extract_signature, map_cross_file_dependency
+from ragc.test.utils import extract_lines, map_cross_file_dependency
 
 
 def completion_prompt(
@@ -67,10 +67,13 @@ Your code here:\n"""
     return prompt
 
 
-def build_prompt(task: Dict[str, Any], repos_path: Union[str, os.PathLike]) -> str:
-    signature = extract_signature(repos_path / task["completion_path"], task["signature_position"])
+def build_prompt(task: Dict[str, Any], repos_path: Union[str, os.PathLike]) -> Dict[str, str]:
+    signature = extract_lines(repos_path / task["completion_path"], task["signature_position"])
     rel_path = task['completion_path'].replace(task['project_path'], '', 1).strip('/')
-    return completion_prompt(rel_path, signature, task['requirement'])
+
+    prompt = completion_prompt(rel_path, signature, task['requirement'])
+    local_context = extract_lines(repos_path / task["completion_path"], (1, task["signature_position"][0] - 1))
+    return {'prompt': prompt, 'local_context': local_context, 'completion_path': rel_path}
 
 
 def _get_correct_namespace(completion_path: str, project_path: str, namespace: str) -> dict:
