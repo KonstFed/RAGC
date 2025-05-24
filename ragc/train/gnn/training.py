@@ -548,6 +548,7 @@ if __name__ == "__main__":
         print("-" * 20)
         print(params)
         chk_p = save_path / exp
+        chk_p.mkdir(exist_ok=True)
         with open(chk_p / "params.json", "w") as f:
             json.dump(params, f)
         train(dataset_path, chk_p, model_params=params["model_params"], training_params=params["training_params"],)

@@ -71,6 +71,12 @@ def train_val_test_split(
     assert len(set(buckets[0]).intersection(buckets[2])) == 0
     assert len(set(buckets[2]).intersection(buckets[1])) == 0
 
+    # for debug purposes
+    print("N. docstring edge pairs")
+    print("\tTrain ds:", sum([len(ds[i].docstring_mask) for i in buckets[0]]))
+    print("\tVal ds:", sum([len(ds[i].docstring_mask) for i in buckets[1]]))
+    print("\tTest ds:", sum([len(ds[i].docstring_mask) for i in buckets[2]]))
+
     train_ds = MapDataset(ds, buckets[0], train_tf)
     val_ds = MapDataset(ds, buckets[1], val_tf)
     test_ds = MapDataset(ds, buckets[2], test_tf)
