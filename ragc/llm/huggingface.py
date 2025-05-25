@@ -129,6 +129,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         max_input: int,
         max_gen: int,
         local_context_lines: int,
+        retrieve_local: bool,
         generation_args: Dict[str, Any],
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -148,6 +149,7 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         self.max_input = max_input
         self.max_gen = max_gen
         self.local_context_lines = local_context_lines
+        self.retrieve_local = retrieve_local
 
         # generation arguments
         self.generation_args = generation_args
@@ -188,7 +190,8 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
         # cross context
         docs = []
         for node in relevant_nodes:
-            docs.append(f'#{node.file_path}\n{node.code}')
+            if self.retrieve_local or node.file_path == completion_path:
+                docs.append(f'#{node.file_path}\n{node.code}')
 
         # local context
         if self.local_context_lines > 0 and local_context:
@@ -242,9 +245,9 @@ class CompletionGenerator(AugmentedGenerator, metaclass=Singleton):
             # decoding and alignment
             generation = self.tokenizer.decode(outputs[0])
             completion = self.__align(generation, completion_path=query['completion_path'])
-            print('full_prompt', full_prompt)
-            print('generation', generation)
-            print('completion', completion)
+            # print('full_prompt', full_prompt)
+            # print('generation', generation)
+            # print('completion', completion)
 
             return completion
         except torch.OutOfMemoryError:
@@ -262,6 +265,7 @@ class CompletionGeneratorConfig(AugmentedGeneratorConfig):
     max_input: int = 16_354
     max_gen: int = 4096
     local_context_lines: int = 0
+    retrieve_local: bool = True
     generation_args: Dict[str, Any] = {}
 
     def create(self) -> CompletionGenerator:
@@ -270,5 +274,6 @@ class CompletionGeneratorConfig(AugmentedGeneratorConfig):
             max_input=self.max_input,
             max_gen=self.max_gen,
             local_context_lines=self.local_context_lines,
+            retrieve_local=self.retrieve_local,
             generation_args=self.generation_args,
         )
